@@ -1111,9 +1111,9 @@
     $("#nextMonth").addEventListener("click", () => { CURRENT_MONTH = shiftMonth(CURRENT_MONTH, 1); syncMonthInput(); render(); });
 
     // import / export / demo
-    $("#importBtn").addEventListener("click", () => $("#fileInput").click());
+    $("#importBtn").addEventListener("click", openImportDialog);
     $("#fileInput").addEventListener("change", onImportFile);
-    $("#exportBtn").addEventListener("click", exportJSON);
+    $("#exportBtn").addEventListener("click", openExportDialog);
     $("#sampleBtn").addEventListener("click", loadSample);
 
     // tema
@@ -1199,33 +1199,111 @@
   }
 
   // ---------- Import / Export ----------
+  // Diálogo genérico (independiente del modal de registros).
+  function openDialog(title, bodyHTML, buttons) {
+    const back = document.createElement("div");
+    back.className = "modal-backdrop";
+    back.innerHTML = `<div class="modal modal-lg">
+      <div class="modal-head"><h3>${esc(title)}</h3><button class="icon-btn js-dlg-close" type="button">✕</button></div>
+      <div class="dlg-body">${bodyHTML}</div>
+      <div class="modal-foot"></div>
+    </div>`;
+    const close = () => { back.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    const foot = back.querySelector(".modal-foot");
+    (buttons || []).forEach((b) => {
+      const btn = document.createElement("button");
+      btn.className = "btn " + (b.cls || "btn-ghost");
+      btn.type = "button";
+      btn.textContent = b.label;
+      btn.addEventListener("click", () => { if (b.onClick) b.onClick(close); if (b.close) close(); });
+      foot.appendChild(btn);
+    });
+    back.querySelector(".js-dlg-close").addEventListener("click", close);
+    back.addEventListener("click", (e) => { if (e.target === back) close(); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(back);
+    setTimeout(() => back.querySelector("textarea, input")?.focus(), 50);
+    return close;
+  }
+
+  function openImportDialog() {
+    const body = `
+      <p class="dlg-hint">Pega aquí tu JSON, o carga un archivo. Esto <b>reemplazará</b> tus datos actuales (exporta antes si quieres respaldo).</p>
+      <textarea id="dlgImportText" class="dlg-textarea" placeholder='Pega aquí tu JSON…  { "version": 1, "moneda": "MXN", ... }'></textarea>
+      <div><button class="btn btn-ghost btn-sm" id="dlgImportFile" type="button">📂 Cargar desde archivo…</button></div>`;
+    openDialog("Importar datos", body, [
+      { label: "Cancelar", cls: "btn-ghost", close: true },
+      { label: "Importar", cls: "btn-primary", onClick: (close) => {
+          const txt = $("#dlgImportText").value.trim();
+          if (!txt) { toast("Pega un JSON o carga un archivo"); return; }
+          if (importFromText(txt)) close();
+        } },
+    ]);
+    $("#dlgImportFile").addEventListener("click", () => $("#fileInput").click());
+  }
+
+  // Carga el contenido del archivo en el textarea del diálogo (o importa directo como fallback).
   function onImportFile(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        DATA = migrate(parsed);
-        save(); render(); toast("📥 Datos importados correctamente");
-      } catch (err) {
-        alert("El archivo no es un JSON válido.\n\n" + err.message);
-      }
+      const ta = document.getElementById("dlgImportText");
+      if (ta) { ta.value = reader.result; toast("Archivo cargado, revisa y pulsa Importar"); }
+      else importFromText(reader.result);
       e.target.value = "";
     };
     reader.readAsText(file);
   }
 
-  function exportJSON() {
+  function importFromText(text) {
+    try {
+      const parsed = JSON.parse(text);
+      DATA = migrate(parsed);
+      save(); render(); toast("📥 Datos importados correctamente");
+      return true;
+    } catch (err) {
+      alert("El JSON no es válido.\n\n" + err.message);
+      return false;
+    }
+  }
+
+  function openExportDialog() {
     DATA.version = SCHEMA_VERSION;
-    const blob = new Blob([JSON.stringify(DATA, null, 2)], { type: "application/json" });
+    const json = JSON.stringify(DATA, null, 2);
+    const body = `
+      <p class="dlg-hint">Copia este JSON al portapapeles o descárgalo como respaldo.</p>
+      <textarea id="dlgExportText" class="dlg-textarea" readonly>${esc(json)}</textarea>`;
+    openDialog("Exportar datos", body, [
+      { label: "Cerrar", cls: "btn-ghost", close: true },
+      { label: "⬇️ Descargar", cls: "btn-ghost", onClick: () => downloadJSON(json) },
+      { label: "📋 Copiar", cls: "btn-primary", onClick: () => copyText(json) },
+    ]);
+  }
+
+  function downloadJSON(json) {
+    const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const stamp = isoToday();
-    a.href = url; a.download = `finanzas-${stamp}.json`;
+    a.href = url; a.download = `finanzas-${isoToday()}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-    toast("📤 JSON exportado");
+    toast("📤 JSON descargado");
+  }
+
+  function copyText(text) {
+    const done = () => toast("📋 Copiado al portapapeles");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy());
+    } else fallbackCopy();
+    function fallbackCopy() {
+      const ta = document.getElementById("dlgExportText");
+      if (!ta) return;
+      ta.focus(); ta.select();
+      try { document.execCommand("copy"); done(); }
+      catch { toast("No se pudo copiar; selecciónalo y copia manualmente"); }
+    }
   }
 
   function loadSample() {

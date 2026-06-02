@@ -283,6 +283,19 @@ tbody tr:hover { background: var(--surface-2); }
 .field-check { flex-direction: row; align-items: center; gap: 9px; }
 .field-check label { font-size: 14px; color: var(--text); }
 
+/* ===== Diálogo importar/exportar ===== */
+.modal.modal-lg { max-width: 640px; }
+.dlg-body { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.dlg-hint { font-size: 13px; color: var(--text-soft); line-height: 1.5; }
+.dlg-textarea {
+  width: 100%; min-height: 260px; resize: vertical;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: var(--radius-sm); padding: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.45; white-space: pre;
+}
+.dlg-textarea:focus { outline: none; border-color: var(--primary); }
+
 /* ===== Toast ===== */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);

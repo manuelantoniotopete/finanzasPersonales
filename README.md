@@ -24,8 +24,8 @@ Listo para publicar en **GitHub Pages**. Los datos se guardan en tu navegador y 
 
 1. Al abrir, la app inicia **vacía** (o con lo último que guardaste en este navegador).
 2. **Autoguardado**: cada cambio se guarda automáticamente en `localStorage`.
-3. Botón **⬇️ Exportar** → descarga un archivo `finanzas-AAAA-MM-DD.json` con todos tus datos.
-4. Botón **⬆️ Importar** → carga un JSON y reemplaza los datos actuales.
+3. Botón **⬇️ Exportar** → abre una ventana con tu JSON para **copiarlo** al portapapeles o **descargarlo** como `finanzas-AAAA-MM-DD.json`.
+4. Botón **⬆️ Importar** → abre una ventana donde puedes **pegar** el JSON o **cargar un archivo**; al confirmar reemplaza los datos actuales.
 5. Botón **✨ Demo** → carga datos de ejemplo para que veas cómo se ve.
 
 > Flujo recomendado: trabajas, al terminar **Exportas** el JSON como respaldo. La próxima vez,
