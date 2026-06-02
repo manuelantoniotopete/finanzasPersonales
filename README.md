@@ -9,7 +9,12 @@ Listo para publicar en **GitHub Pages**. Los datos se guardan en tu navegador y 
 - **Dashboard** con KPIs (ingresos, gastos, balance, por pagar, ahorrado) y 4 gráficas (Chart.js).
 - **Pagos del mes** — banco, concepto, categoría, monto, fecha límite, pagado ✓, notas. Navegación mes a mes.
 - **Gastos recurrentes** — suscripciones/servicios fijos, total mensual y anual.
-- **Ingresos** — salarios y entradas extra.
+- **Ingresos** — entradas extra/eventuales (freelance, ventas, regalos…).
+- **Sueldo / Nómina** — tu **ingreso fijo virtual** (espejo de los gastos recurrentes): defines tu
+  **neto mensual** (lo que cuenta), bruto (informativo), frecuencia (quincenal/mensual), **aguinaldo**
+  y **bonos** que caen en su mes real (PTU, puntualidad…). Mientras esté **activo**, se suma solo a tus
+  ingresos cada mes —sin recapturarlo— y alimenta el balance y las gráficas. Incluye KPI de **ingreso
+  anual estimado** y una gráfica de composición.
 - **Ahorros y metas** — metas con barra de progreso (boda, fondo de emergencia, viajes…).
 - **Proyectos** — seguimiento completo de una obra/proyecto (p. ej. una construcción):
   libro de **movimientos** (entradas/aportaciones y salidas/gastos), **categorías** de gasto
@@ -56,7 +61,9 @@ data.ejemplo.json     JSON de ejemplo para importar
   "moneda": "MXN",
   "pagos":       [{ "mes": "2026-06", "banco": "", "concepto": "", "categoria": "", "monto": 0, "fechaLimite": "2026-06-05", "pagado": false, "notas": "" }],
   "recurrentes": [{ "concepto": "", "categoria": "", "banco": "", "monto": 0, "diaCobro": 1, "activo": true, "notas": "" }],
-  "ingresos":    [{ "fecha": "2026-06-15", "concepto": "", "fuente": "", "tipo": "Salario", "monto": 0, "notas": "" }],
+  "ingresos":    [{ "fecha": "2026-06-15", "concepto": "", "fuente": "", "tipo": "Extra", "monto": 0, "notas": "" }],
+  "sueldo":      { "activo": true, "netoMensual": 0, "brutoMensual": 0, "frecuencia": "Quincenal", "diasPago": "15, 30", "vigenteDesde": "2026-01", "aguinaldoMonto": 0, "aguinaldoMes": "Diciembre", "notas": "" },
+  "bonos":       [{ "nombre": "PTU", "monto": 0, "mes": "Mayo", "notas": "" }],
   "ahorros":     [{ "nombre": "", "tipo": "Meta", "objetivo": 0, "ahorrado": 0, "fechaMeta": "", "notas": "" }],
   "viajes":      [{ "destino": "", "fecha": "", "dias": 0, "presupuesto": 0, "gastado": 0, "estado": "Planeado", "notas": "" }],
   "proyectos":   [{

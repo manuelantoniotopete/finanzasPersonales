@@ -25,6 +25,10 @@
   const TIPOS_PROYECTO = ["Construcción", "Remodelación", "Negocio", "Vehículo", "Mudanza", "Evento", "Otro"];
   const ESTADOS_PROYECTO = ["Planeado", "En curso", "Pausado", "Terminado"];
 
+  const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  const mesIdx = (nombre) => MESES.indexOf(nombre) + 1; // 1..12, 0 si no aplica
+
   // ---------- Estado ----------
   const emptyData = () => ({
     version: SCHEMA_VERSION,
@@ -32,6 +36,13 @@
     pagos: [],        // {id, mes, banco, concepto, categoria, monto, fechaLimite, pagado, notas}
     recurrentes: [],  // {id, concepto, categoria, banco, monto, diaCobro, activo, notas}
     ingresos: [],     // {id, fecha, concepto, fuente, tipo, monto, notas}
+    // Perfil de sueldo (ingreso fijo virtual, espejo de los recurrentes de gasto).
+    sueldo: {
+      activo: true, netoMensual: 0, brutoMensual: 0,
+      frecuencia: "Quincenal", diasPago: "15, 30", vigenteDesde: "",
+      aguinaldoMonto: 0, aguinaldoMes: "Diciembre", notas: "",
+    },
+    bonos: [],        // {id, nombre, monto, mes}  ← caen en su mes real (cada año)
     ahorros: [],      // {id, nombre, tipo, objetivo, ahorrado, fechaMeta, notas}
     viajes: [],       // {id, destino, fecha, dias, presupuesto, gastado, estado, notas}
     proyectos: [],    // {id, nombre, tipo, estado, presupuesto, fechaInicio, fechaMeta, ubicacion, notas,
@@ -114,9 +125,12 @@
     const base = emptyData();
     if (!obj || typeof obj !== "object") return base;
     base.moneda = obj.moneda || "MXN";
-    for (const k of ["pagos", "recurrentes", "ingresos", "ahorros", "viajes"]) {
+    for (const k of ["pagos", "recurrentes", "ingresos", "ahorros", "viajes", "bonos"]) {
       base[k] = Array.isArray(obj[k]) ? obj[k].map((r) => ({ id: r.id || uid(), ...r })) : [];
     }
+    // Perfil de sueldo: mezcla con los defaults para no perder llaves nuevas.
+    base.sueldo = (obj.sueldo && typeof obj.sueldo === "object")
+      ? { ...base.sueldo, ...obj.sueldo } : base.sueldo;
     // proyectos: normaliza también sus sub-colecciones
     base.proyectos = Array.isArray(obj.proyectos) ? obj.proyectos.map((p) => ({
       id: p.id || uid(),
@@ -236,7 +250,35 @@
         { k: "notas", label: "Notas", type: "textarea", span: 2 },
       ],
     },
+    // Bonos / pagos extra que caen en un mes específico del año.
+    bonos: {
+      title: "bono",
+      fields: [
+        { k: "nombre", label: "Nombre del bono (PTU, puntualidad, vales…)", type: "text", required: true, span: 2 },
+        { k: "monto", label: "Monto neto", type: "number", required: true },
+        { k: "mes", label: "Mes en que cae", type: "select", options: MESES, required: true, default: () => "Diciembre" },
+        { k: "notas", label: "Notas", type: "textarea", span: 2 },
+      ],
+    },
   };
+
+  // Esquema dinámico del perfil de sueldo (objeto singleton, no array).
+  function sueldoSchema() {
+    return {
+      title: "sueldo",
+      fields: [
+        { k: "netoMensual", label: "Sueldo NETO mensual (lo que te cae)", type: "number", required: true, span: 2 },
+        { k: "brutoMensual", label: "Sueldo bruto mensual (informativo)", type: "number" },
+        { k: "frecuencia", label: "Frecuencia de pago", type: "select", options: ["Mensual", "Quincenal", "Semanal"], default: () => "Quincenal" },
+        { k: "diasPago", label: "Días de pago (ej. 15, 30)", type: "text" },
+        { k: "vigenteDesde", label: "Vigente desde (mes)", type: "month", default: () => CURRENT_MONTH },
+        { k: "aguinaldoMonto", label: "Aguinaldo neto", type: "number" },
+        { k: "aguinaldoMes", label: "Mes del aguinaldo", type: "select", options: MESES, default: () => "Diciembre" },
+        { k: "activo", label: "Activo — cuéntalo en mis ingresos cada mes", type: "checkbox", default: () => true },
+        { k: "notas", label: "Notas", type: "textarea", span: 2 },
+      ],
+    };
+  }
 
   // Opciones de proveedores del proyecto actual (para el select de movimientos)
   function proveedoresOpts() {
@@ -264,11 +306,13 @@
     else if (VIEW === "pagos")       c.innerHTML = viewPagos();
     else if (VIEW === "recurrentes") c.innerHTML = viewRecurrentes();
     else if (VIEW === "ingresos")    c.innerHTML = viewIngresos();
+    else if (VIEW === "sueldo")      c.innerHTML = viewSueldo();
     else if (VIEW === "ahorros")     c.innerHTML = viewAhorros();
     else if (VIEW === "viajes")      c.innerHTML = viewViajes();
     else if (VIEW === "proyectos")   c.innerHTML = CURRENT_PROYECTO ? viewProyectoDetalle() : viewProyectos();
     // charts después de inyectar el HTML
     if (VIEW === "dashboard") renderDashboardCharts();
+    else if (VIEW === "sueldo") renderSueldoChart();
     else if (VIEW === "viajes") renderViajesChart();
     else if (VIEW === "proyectos" && CURRENT_PROYECTO) renderProyectoCharts();
     c.scrollTop = 0;
@@ -283,6 +327,29 @@
     const pagos = sum(pagosDelMes(ym), "monto");
     const rec = sum(DATA.recurrentes.filter((r) => r.activo !== false), "monto");
     return { pagos, rec, total: pagos + rec };
+  }
+
+  // ¿El sueldo aplica a este mes? (activo y mes >= vigenteDesde)
+  function sueldoVigente(ym) {
+    const s = DATA.sueldo;
+    if (!s || !s.activo) return false;
+    if (s.vigenteDesde && ym < s.vigenteDesde) return false;
+    return true;
+  }
+  // Ingreso fijo (virtual) del sueldo para un mes: neto + aguinaldo (si cae) + bonos del mes.
+  function ingresoSueldoMes(ym) {
+    if (!sueldoVigente(ym)) return { neto: 0, aguinaldo: 0, bonos: 0, total: 0, bonosList: [] };
+    const s = DATA.sueldo;
+    const mesNum = Number(ym.split("-")[1]);
+    const neto = num(s.netoMensual);
+    const aguinaldo = mesIdx(s.aguinaldoMes) === mesNum ? num(s.aguinaldoMonto) : 0;
+    const bonosList = (DATA.bonos || []).filter((b) => mesIdx(b.mes) === mesNum);
+    const bonos = sum(bonosList, "monto");
+    return { neto, aguinaldo, bonos, total: neto + aguinaldo + bonos, bonosList };
+  }
+  // Ingreso total del mes = registros manuales + sueldo virtual.
+  function ingresoTotalMes(ym) {
+    return sum(ingresosDelMes(ym), "monto") + ingresoSueldoMes(ym).total;
   }
 
   function diasHasta(iso) {
@@ -301,7 +368,11 @@
   // ---------- Vista: Dashboard ----------
   function viewDashboard() {
     const ym = CURRENT_MONTH;
-    const ing = sum(ingresosDelMes(ym), "monto");
+    const sld = ingresoSueldoMes(ym);
+    const ing = sum(ingresosDelMes(ym), "monto") + sld.total;
+    const ingFoot = sld.total > 0
+      ? `Sueldo ${fmtMoney(sld.neto)}${sld.aguinaldo ? " · 🎁 Aguinaldo " + fmtMoney(sld.aguinaldo) : ""}${sld.bonos ? " · 🎁 Bonos " + fmtMoney(sld.bonos) : ""}${ingresosDelMes(ym).length ? " · +" + ingresosDelMes(ym).length + " extra" : ""}`
+      : ingresosDelMes(ym).length + " registro(s)";
     const g = gastoMesTotal(ym);
     const balance = ing - g.total;
     const pendiente = sum(pagosDelMes(ym).filter((p) => !p.pagado), "monto");
@@ -329,7 +400,7 @@
       </div>
 
       <div class="kpi-grid">
-        ${kpi("Ingresos del mes", fmtMoney(ing), "pos", ingresosDelMes(ym).length + " registro(s)")}
+        ${kpi("Ingresos del mes", fmtMoney(ing), "pos", ingFoot)}
         ${kpi("Gastos del mes", fmtMoney(g.total), "neg", `Pagos ${fmtMoney(g.pagos)} · Fijos ${fmtMoney(g.rec)}`)}
         ${kpi("Balance", fmtMoney(balance), balance >= 0 ? "pos" : "neg", balance >= 0 ? "Te sobra" : "Vas en rojo")}
         ${kpi("Por pagar", fmtMoney(pendiente), pendiente > 0 ? "neg" : "pos", pagosDelMes(ym).filter(p=>!p.pagado).length + " pendiente(s)")}
@@ -411,7 +482,7 @@
     // 1) Ingresos vs gastos, 6 meses
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(shiftMonth(CURRENT_MONTH, -i));
-    const ingData = months.map((m) => sum(ingresosDelMes(m), "monto"));
+    const ingData = months.map((m) => ingresoTotalMes(m));
     const recFijo = sum(DATA.recurrentes.filter((r) => r.activo !== false), "monto");
     const gasData = months.map((m) => sum(pagosDelMes(m), "monto") + recFijo);
     mkChart("chIngGas", {
@@ -584,11 +655,80 @@
         </div>
         <button class="btn btn-primary js-add" data-mod="ingresos">＋ Agregar ingreso</button>
       </div>
+      ${sueldoVigente(ym) && ingresoSueldoMes(ym).total > 0 ? `<div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <span>💼 Tu sueldo (<b>${fmtMoney(ingresoSueldoMes(ym).total)}</b> este mes) ya se cuenta automáticamente. Esta lista es para ingresos <b>extra/eventuales</b>.</span>
+        <button class="btn btn-ghost btn-sm js-goto" data-view="sueldo">Configurar sueldo →</button>
+      </div>` : ""}
       ${is.length ? `<div class="table-wrap"><div class="table-scroll"><table>
         <thead><tr><th>Fecha</th><th>Concepto</th><th>Fuente</th><th>Tipo</th><th class="t-num">Monto</th><th>Notas</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div></div>` : emptyState("ingresos", "Sin ingresos registrados", "Agrega tus salarios y otros ingresos.")}
     `;
+  }
+
+  // ---------- Vista: Sueldo / Nómina ----------
+  function viewSueldo() {
+    const s = DATA.sueldo || {};
+    const bonos = (DATA.bonos || []).slice().sort((a, b) => mesIdx(a.mes) - mesIdx(b.mes));
+    const neto = num(s.netoMensual), bruto = num(s.brutoMensual), agui = num(s.aguinaldoMonto);
+    const totalBonos = sum(bonos, "monto");
+    const anual = neto * 12 + agui + totalBonos;
+    const sld = ingresoSueldoMes(CURRENT_MONTH);
+
+    const bonoRows = bonos.map((b) => `<tr data-id="${b.id}" data-mod="bonos">
+        <td><b>${esc(b.nombre)}</b></td>
+        <td><span class="pill muted">${esc(b.mes) || "—"}</span></td>
+        <td class="t-num" style="color:var(--success)">${fmtMoney(b.monto)}</td>
+        <td class="notes-cell">${esc(b.notas) || ""}</td>
+        ${actionsCell()}
+      </tr>`).join("");
+
+    return `
+      <div class="view-head">
+        <div>
+          <div class="view-title">Sueldo / Nómina</div>
+          <div class="view-sub">Tu ingreso fijo se cuenta solo cada mes${s.vigenteDesde ? " desde " + esc(monthLabel(s.vigenteDesde)) : ""}${s.activo ? "" : " · ⏸️ inactivo"}.</div>
+        </div>
+        <button class="btn btn-primary js-add" data-mod="sueldo">✏️ Configurar sueldo</button>
+      </div>
+
+      <div class="kpi-grid">
+        ${kpi("Sueldo neto mensual", fmtMoney(neto), "pos", s.frecuencia ? esc(s.frecuencia) + (s.diasPago ? " · días " + esc(s.diasPago) : "") : "Sin configurar")}
+        ${kpi("Sueldo bruto mensual", fmtMoney(bruto), "", "Informativo (no se cuenta)")}
+        ${kpi("Aguinaldo", fmtMoney(agui), "", agui ? "Cae en " + esc(s.aguinaldoMes) : "Sin aguinaldo")}
+        ${kpi("Ingreso anual estimado", fmtMoney(anual), "pos", "Neto×12 + aguinaldo + bonos")}
+        ${kpi("Cae este mes", fmtMoney(sld.total), sld.total > 0 ? "pos" : "", !sueldoVigente(CURRENT_MONTH) ? "Inactivo este mes" : "Neto" + (sld.aguinaldo ? " + aguinaldo" : "") + (sld.bonos ? " + bonos" : ""))}
+        ${kpi("Estado", s.activo ? "Activo ✓" : "Inactivo", s.activo ? "pos" : "neg", s.activo ? "Se suma a tus ingresos" : "No se está contando")}
+      </div>
+
+      ${anual > 0 ? `<div class="chart-grid"><div class="card"><div class="card-title">Composición de tu ingreso anual</div><div class="chart-box"><canvas id="chSueldo"></canvas></div></div></div>` : ""}
+
+      <div class="view-head" style="margin-top:8px">
+        <div>
+          <div class="view-title" style="font-size:18px">🎁 Bonos y pagos extra</div>
+          <div class="view-sub">${bonos.length} registro(s) · Total anual ${fmtMoney(totalBonos)} · cada uno cae en el mes que indiques</div>
+        </div>
+        <button class="btn btn-primary js-add" data-mod="bonos">＋ Agregar bono</button>
+      </div>
+      ${bonos.length ? `<div class="table-wrap"><div class="table-scroll"><table>
+        <thead><tr><th>Nombre</th><th>Mes</th><th class="t-num">Monto</th><th>Notas</th><th></th></tr></thead>
+        <tbody>${bonoRows}</tbody>
+      </table></div></div>` : emptyState("bonos", "Sin bonos registrados", "Agrega PTU/utilidades, bono de puntualidad, vales, etc. Caen en su mes real.")}
+    `;
+  }
+
+  function renderSueldoChart() {
+    if (typeof Chart === "undefined") return;
+    const s = DATA.sueldo || {};
+    const neto = num(s.netoMensual) * 12, agui = num(s.aguinaldoMonto), bonos = sum(DATA.bonos || [], "monto");
+    if (neto + agui + bonos <= 0) return;
+    const col = themeColors();
+    Chart.defaults.color = col.soft;
+    mkChart("chSueldo", {
+      type: "doughnut",
+      data: { labels: ["Sueldo (×12)", "Aguinaldo", "Bonos"], datasets: [{ data: [neto, agui, bonos], backgroundColor: [col.primary, "#f59e0b", col.success], borderWidth: 0 }] },
+      options: donutOpts(col),
+    });
   }
 
   // ---------- Vista: Ahorros ----------
@@ -999,6 +1139,10 @@
       schema.fields.forEach((f) => { record[f.k] = pc[f._cat] != null ? pc[f._cat] : ""; });
       return openModalWith(schema, "presupuestoCat", record, "Presupuesto por categoría");
     }
+    // El perfil de sueldo es un objeto singleton (no un array de registros).
+    if (mod === "sueldo") {
+      return openModalWith(sueldoSchema(), "sueldo", DATA.sueldo || {}, "Configurar sueldo");
+    }
     return openModalWith(SCHEMAS[mod], mod, record);
   }
 
@@ -1043,7 +1187,8 @@
     e.preventDefault();
     if (!modalCtx) return;
     const { mod, id } = modalCtx;
-    const schema = mod === "presupuestoCat" ? presupuestoCatSchema() : SCHEMAS[mod];
+    const schema = mod === "presupuestoCat" ? presupuestoCatSchema()
+      : mod === "sueldo" ? sueldoSchema() : SCHEMAS[mod];
 
     // Caso especial: editor de presupuesto por categoría → objeto {categoria: monto}.
     if (mod === "presupuestoCat") {
@@ -1054,6 +1199,20 @@
         p.presupuestoCat = pc;
         scheduleSave(); closeModal(); render(); toast("Presupuestos guardados");
       } else closeModal();
+      return;
+    }
+
+    // Caso especial: perfil de sueldo → se escribe sobre el objeto singleton.
+    if (mod === "sueldo") {
+      const s = DATA.sueldo || (DATA.sueldo = {});
+      for (const f of schema.fields) {
+        const el = $("#f_" + f.k);
+        if (!el) continue;
+        if (f.type === "checkbox") s[f.k] = el.checked;
+        else if (f.type === "number") s[f.k] = num(el.value);
+        else s[f.k] = el.value.trim();
+      }
+      scheduleSave(); closeModal(); render(); toast("Sueldo guardado");
       return;
     }
 

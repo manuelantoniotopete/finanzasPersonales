@@ -58,24 +58,35 @@
       "notas": ""
     }
   ],
+  "sueldo": {
+    "activo": true,
+    "netoMensual": 28000,
+    "brutoMensual": 40000,
+    "frecuencia": "Quincenal",
+    "diasPago": "15, 30",
+    "vigenteDesde": "2026-01",
+    "aguinaldoMonto": 20000,
+    "aguinaldoMes": "Diciembre",
+    "notas": "Sueldo base; se cuenta solo cada mes."
+  },
+  "bonos": [
+    {
+      "id": "b1",
+      "nombre": "PTU (utilidades)",
+      "monto": 15000,
+      "mes": "Mayo",
+      "notas": "Reparto anual de utilidades"
+    }
+  ],
   "ingresos": [
     {
       "id": "i1",
-      "fecha": "2026-06-15",
-      "concepto": "Quincena",
-      "fuente": "Mi empresa",
-      "tipo": "Salario",
-      "monto": 14000,
-      "notas": ""
-    },
-    {
-      "id": "i2",
-      "fecha": "2026-06-30",
-      "concepto": "Quincena",
-      "fuente": "Mi empresa",
-      "tipo": "Salario",
-      "monto": 14000,
-      "notas": ""
+      "fecha": "2026-06-20",
+      "concepto": "Proyecto freelance",
+      "fuente": "Cliente externo",
+      "tipo": "Extra",
+      "monto": 6000,
+      "notas": "Ingreso eventual, fuera del sueldo"
     }
   ],
   "ahorros": [
