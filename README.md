@@ -23,7 +23,21 @@ Listo para publicar en **GitHub Pages**. Los datos se guardan en tu navegador y 
   y un tablero con saldo disponible, gastado vs presupuesto, avance de obra vs gasto y gráficas.
 - **Viajes** — presupuesto vs gastado por viaje.
 - **Tema claro/oscuro** con interruptor (recuerda tu preferencia).
+- **PWA instalable** — se instala en celular/desktop como app (ícono propio, ventana sin barra) y
+  **funciona offline** gracias a un service worker que cachea el shell. Diseño **responsivo** para móvil.
 - **Moneda:** MXN (formato es-MX).
+
+## 📲 Instalar como app (PWA)
+
+Servida por **HTTPS** (GitHub Pages ya lo es), el navegador ofrece instalarla:
+
+- **Android / Chrome:** menú ⋮ → *Instalar app* / *Agregar a pantalla de inicio*.
+- **iPhone / Safari:** botón *Compartir* → *Agregar a pantalla de inicio*.
+- **Desktop / Chrome–Edge:** ícono de instalar ⊕ en la barra de direcciones.
+
+Una vez instalada abre offline (tus datos ya viven en `localStorage`). El service worker (`sw.js`)
+**solo funciona sobre HTTP(S)**, no abriendo el archivo con `file://`. Si cambias archivos del shell,
+sube `CACHE_VERSION` en `sw.js` para forzar la actualización.
 
 ## 💾 Cómo funciona la persistencia
 
@@ -48,9 +62,12 @@ No requiere servidor ni compilación. La única dependencia (Chart.js) se carga 
 
 ```
 index.html            Estructura y layout
-css/styles.css        Estilos + temas claro/oscuro
+css/styles.css        Estilos + temas claro/oscuro + responsive
 js/app.js             Toda la lógica (estado, render, charts, import/export)
 data.ejemplo.json     JSON de ejemplo para importar
+manifest.webmanifest  Metadatos de la PWA (nombre, iconos, colores)
+sw.js                 Service worker (cache del shell para uso offline)
+icons/                Iconos de la app (192, 512, maskable, apple-touch)
 ```
 
 ## 🧩 Formato del JSON

@@ -2,11 +2,21 @@
 <html lang="es-MX">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Mis Finanzas</title>
+  <meta name="description" content="Sistema personal de finanzas, 100% local: pagos, sueldo, ahorros, proyectos y viajes." />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=2" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#4f6ef7" id="metaTheme" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Finanzas" />
 </head>
 <body>
   <!-- ===== Sidebar ===== -->
@@ -63,9 +73,9 @@
       </div>
 
       <div class="topbar-right">
-        <button class="btn btn-ghost" id="importBtn" title="Cargar un archivo JSON">⬆️ Importar</button>
-        <button class="btn btn-ghost" id="exportBtn" title="Descargar tus datos como JSON">⬇️ Exportar</button>
-        <button class="btn btn-ghost" id="sampleBtn" title="Cargar datos de ejemplo">✨ Demo</button>
+        <button class="btn btn-ghost" id="importBtn" title="Cargar un archivo JSON">⬆️ <span class="lbl">Importar</span></button>
+        <button class="btn btn-ghost" id="exportBtn" title="Descargar tus datos como JSON">⬇️ <span class="lbl">Exportar</span></button>
+        <button class="btn btn-ghost" id="sampleBtn" title="Cargar datos de ejemplo">✨ <span class="lbl">Demo</span></button>
         <button class="icon-btn" id="themeBtn" title="Cambiar tema">🌙</button>
         <input type="file" id="fileInput" accept="application/json,.json" hidden />
       </div>
@@ -89,10 +99,21 @@
     </div>
   </div>
 
+  <!-- ===== Scrim del menú móvil ===== -->
+  <div class="nav-scrim" id="navScrim"></div>
+
   <!-- ===== Toast ===== -->
   <div class="toast" id="toast" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="js/app.js" defer></script>
+  <script src="js/app.js?v=2" defer></script>
+  <script>
+    // Registro del Service Worker (habilita instalación y uso offline).
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW no registrado:", e));
+      });
+    }
+  </script>
 </body>
 </html>

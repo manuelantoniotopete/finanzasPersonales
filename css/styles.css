@@ -154,7 +154,7 @@ body {
   padding: 18px; box-shadow: var(--shadow);
 }
 .card-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
-.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 22px; }
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 22px; }
 .chart-box { position: relative; height: 260px; }
 
 /* ===== Table ===== */
@@ -305,16 +305,65 @@ tbody tr:hover { background: var(--surface-2); }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ===== Scrim del menú móvil ===== */
+.nav-scrim {
+  position: fixed; inset: 0; background: rgba(16,24,40,.5); z-index: 45;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.nav-scrim.show { opacity: 1; pointer-events: auto; }
+
+/* Áreas seguras (notch) para PWA instalada */
+.topbar { padding-top: max(14px, env(safe-area-inset-top)); }
+.sidebar { padding-top: max(20px, env(safe-area-inset-top)); padding-left: max(14px, env(safe-area-inset-left)); }
+.toast { bottom: max(24px, env(safe-area-inset-bottom)); }
+
 /* ===== Responsive ===== */
 @media (max-width: 860px) {
   .sidebar {
     position: fixed; left: 0; top: 0; z-index: 50; transform: translateX(-100%);
     transition: transform .2s; box-shadow: var(--shadow-lg);
+    width: min(80vw, 280px);
   }
   .sidebar.open { transform: translateX(0); }
   .only-mobile { display: inline-flex; }
   .content { padding: 18px; }
-  .topbar { padding: 12px 16px; }
+  .topbar { padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); }
+  .topbar-left, .topbar-right { gap: 6px; }
   .btn span.lbl { display: none; }
   .field-grid { grid-template-columns: 1fr; }
 }
+
+/* Teléfonos: densidad y tipografía ajustadas */
+@media (max-width: 560px) {
+  .content { padding: 14px; }
+  .view-title { font-size: 19px; }
+  .view-head { margin-bottom: 16px; }
+
+  /* KPIs de dos en dos en vez de una columna gigante */
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  .kpi { padding: 14px; }
+  .kpi-value { font-size: 21px; margin-top: 5px; }
+  .kpi-label { font-size: 11px; }
+  .kpi-foot { font-size: 11.5px; }
+
+  /* Gráficas siempre a una columna y un poco más bajas */
+  .chart-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 16px; }
+  .chart-box { height: 230px; }
+  .card { padding: 14px; }
+
+  /* Tarjetas (metas/viajes/proyectos) a una columna */
+  .goal-grid { grid-template-columns: 1fr; }
+  /* Acciones siempre visibles en touch (no hay hover) */
+  .goal-actions { display: flex; position: static; justify-content: flex-end; margin-bottom: 4px; }
+
+  /* Topbar compacto */
+  .month-input { padding: 6px 8px; font-size: 13px; }
+  .topbar .btn { padding: 8px 10px; }
+  .icon-btn { width: 34px; height: 34px; }
+
+  /* Modal como hoja inferior (más cómodo con el pulgar) */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal, .modal.modal-lg { max-width: 100%; width: 100%; border-radius: var(--radius) var(--radius) 0 0; max-height: 92vh; animation: sheet .22s ease; }
+  .modal-foot { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+@keyframes sheet { from { transform: translateY(100%); } to { transform: translateY(0); } }

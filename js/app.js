@@ -1260,7 +1260,7 @@
       if (!b) return;
       VIEW = b.dataset.view;
       CURRENT_PROYECTO = null;     // siempre entra a la lista de proyectos
-      $(".sidebar").classList.remove("open");
+      closeNav();
       render();
     });
 
@@ -1278,8 +1278,12 @@
     // tema
     $("#themeBtn").addEventListener("click", toggleTheme);
 
-    // menú móvil
-    $("#menuBtn").addEventListener("click", () => $(".sidebar").classList.toggle("open"));
+    // menú móvil (drawer + scrim)
+    $("#menuBtn").addEventListener("click", () => {
+      const open = $(".sidebar").classList.toggle("open");
+      $("#navScrim").classList.toggle("show", open);
+    });
+    $("#navScrim").addEventListener("click", closeNav);
 
     // delegación en content (add / edit / del / toggle)
     $("#content").addEventListener("click", onContentClick);
@@ -1477,7 +1481,15 @@
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
     $("#themeBtn").textContent = t === "dark" ? "☀️" : "🌙";
+    // Sincroniza el color de la barra del navegador / status bar móvil con el topbar.
+    const meta = $("#metaTheme");
+    if (meta) meta.setAttribute("content", t === "dark" ? "#161b24" : "#ffffff");
     localStorage.setItem(LS_THEME, t);
+  }
+  // Cierra el drawer móvil y su scrim.
+  function closeNav() {
+    $(".sidebar")?.classList.remove("open");
+    $("#navScrim")?.classList.remove("show");
   }
   function toggleTheme() {
     const cur = document.documentElement.getAttribute("data-theme") || "light";
