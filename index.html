@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mis Finanzas</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+</head>
+<body>
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-logo">💰</span>
+      <span class="brand-name">Mis Finanzas</span>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button class="nav-item is-active" data-view="dashboard">
+        <span class="nav-ico">📊</span> Dashboard
+      </button>
+      <button class="nav-item" data-view="pagos">
+        <span class="nav-ico">🧾</span> Pagos del mes
+      </button>
+      <button class="nav-item" data-view="recurrentes">
+        <span class="nav-ico">🔁</span> Gastos recurrentes
+      </button>
+      <button class="nav-item" data-view="ingresos">
+        <span class="nav-ico">💵</span> Ingresos
+      </button>
+      <button class="nav-item" data-view="ahorros">
+        <span class="nav-ico">🎯</span> Ahorros y proyectos
+      </button>
+      <button class="nav-item" data-view="viajes">
+        <span class="nav-ico">🧳</span> Viajes
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="save-state" id="saveState" title="Estado de guardado local">
+        <span class="dot"></span><span id="saveStateText">Sin cambios</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== Main ===== -->
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn only-mobile" id="menuBtn" title="Menú">☰</button>
+        <div class="month-picker">
+          <button class="icon-btn" id="prevMonth" title="Mes anterior">‹</button>
+          <input type="month" id="monthInput" class="month-input" />
+          <button class="icon-btn" id="nextMonth" title="Mes siguiente">›</button>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <button class="btn btn-ghost" id="importBtn" title="Cargar un archivo JSON">⬆️ Importar</button>
+        <button class="btn btn-ghost" id="exportBtn" title="Descargar tus datos como JSON">⬇️ Exportar</button>
+        <button class="btn btn-ghost" id="sampleBtn" title="Cargar datos de ejemplo">✨ Demo</button>
+        <button class="icon-btn" id="themeBtn" title="Cambiar tema">🌙</button>
+        <input type="file" id="fileInput" accept="application/json,.json" hidden />
+      </div>
+    </header>
+
+    <main class="content" id="content"><!-- vistas inyectadas por JS --></main>
+  </div>
+
+  <!-- ===== Modal genérico ===== -->
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3 id="modalTitle">Registro</h3>
+        <button class="icon-btn" id="modalClose">✕</button>
+      </div>
+      <form id="modalForm" class="modal-form"><!-- campos inyectados --></form>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" id="modalCancel" type="button">Cancelar</button>
+        <button class="btn btn-primary" id="modalSave" type="submit" form="modalForm">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Toast ===== -->
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="js/app.js" defer></script>
+</body>
+</html>

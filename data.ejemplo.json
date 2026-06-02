@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "moneda": "MXN",
+  "pagos": [
+    {
+      "id": "p1",
+      "mes": "2026-06",
+      "banco": "BBVA",
+      "concepto": "Renta departamento",
+      "categoria": "Vivienda",
+      "monto": 9500,
+      "fechaLimite": "2026-06-05",
+      "pagado": true,
+      "notas": ""
+    },
+    {
+      "id": "p2",
+      "mes": "2026-06",
+      "banco": "Santander",
+      "concepto": "Tarjeta de crédito",
+      "categoria": "Tarjeta de crédito",
+      "monto": 3200,
+      "fechaLimite": "2026-06-18",
+      "pagado": false,
+      "notas": "Pago mínimo 1,100"
+    },
+    {
+      "id": "p3",
+      "mes": "2026-06",
+      "banco": "CFE",
+      "concepto": "Luz",
+      "categoria": "Servicios",
+      "monto": 680,
+      "fechaLimite": "2026-06-22",
+      "pagado": false,
+      "notas": ""
+    }
+  ],
+  "recurrentes": [
+    {
+      "id": "r1",
+      "concepto": "Netflix",
+      "categoria": "Suscripciones",
+      "banco": "Santander",
+      "monto": 219,
+      "diaCobro": 12,
+      "activo": true,
+      "notas": "Plan estándar"
+    },
+    {
+      "id": "r2",
+      "concepto": "Internet Totalplay",
+      "categoria": "Servicios",
+      "banco": "BBVA",
+      "monto": 599,
+      "diaCobro": 15,
+      "activo": true,
+      "notas": ""
+    }
+  ],
+  "ingresos": [
+    {
+      "id": "i1",
+      "fecha": "2026-06-15",
+      "concepto": "Quincena",
+      "fuente": "Mi empresa",
+      "tipo": "Salario",
+      "monto": 14000,
+      "notas": ""
+    },
+    {
+      "id": "i2",
+      "fecha": "2026-06-30",
+      "concepto": "Quincena",
+      "fuente": "Mi empresa",
+      "tipo": "Salario",
+      "monto": 14000,
+      "notas": ""
+    }
+  ],
+  "ahorros": [
+    {
+      "id": "a1",
+      "nombre": "Boda",
+      "tipo": "Proyecto",
+      "objetivo": 180000,
+      "ahorrado": 64000,
+      "fechaMeta": "2027-06-01",
+      "notas": "Meta a 12 meses"
+    },
+    {
+      "id": "a2",
+      "nombre": "Fondo de emergencia",
+      "tipo": "Fondo emergencia",
+      "objetivo": 90000,
+      "ahorrado": 52000,
+      "fechaMeta": "",
+      "notas": "3 meses de gastos"
+    }
+  ]
+}
