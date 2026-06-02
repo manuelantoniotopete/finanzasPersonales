@@ -10,7 +10,13 @@ Listo para publicar en **GitHub Pages**. Los datos se guardan en tu navegador y 
 - **Pagos del mes** — banco, concepto, categoría, monto, fecha límite, pagado ✓, notas. Navegación mes a mes.
 - **Gastos recurrentes** — suscripciones/servicios fijos, total mensual y anual.
 - **Ingresos** — salarios y entradas extra.
-- **Ahorros y proyectos** — metas con barra de progreso (boda, fondo de emergencia, viajes…).
+- **Ahorros y metas** — metas con barra de progreso (boda, fondo de emergencia, viajes…).
+- **Proyectos** — seguimiento completo de una obra/proyecto (p. ej. una construcción):
+  libro de **movimientos** (entradas/aportaciones y salidas/gastos), **categorías** de gasto
+  (mano de obra, material, herramienta, permisos, fletes, maquinaria…), **etapas** con % de avance,
+  **presupuesto por categoría**, **directorio de proveedores/trabajadores**, recibo por nota/URL,
+  y un tablero con saldo disponible, gastado vs presupuesto, avance de obra vs gasto y gráficas.
+- **Viajes** — presupuesto vs gastado por viaje.
 - **Tema claro/oscuro** con interruptor (recuerda tu preferencia).
 - **Moneda:** MXN (formato es-MX).
 
@@ -51,7 +57,16 @@ data.ejemplo.json     JSON de ejemplo para importar
   "pagos":       [{ "mes": "2026-06", "banco": "", "concepto": "", "categoria": "", "monto": 0, "fechaLimite": "2026-06-05", "pagado": false, "notas": "" }],
   "recurrentes": [{ "concepto": "", "categoria": "", "banco": "", "monto": 0, "diaCobro": 1, "activo": true, "notas": "" }],
   "ingresos":    [{ "fecha": "2026-06-15", "concepto": "", "fuente": "", "tipo": "Salario", "monto": 0, "notas": "" }],
-  "ahorros":     [{ "nombre": "", "tipo": "Meta", "objetivo": 0, "ahorrado": 0, "fechaMeta": "", "notas": "" }]
+  "ahorros":     [{ "nombre": "", "tipo": "Meta", "objetivo": 0, "ahorrado": 0, "fechaMeta": "", "notas": "" }],
+  "viajes":      [{ "destino": "", "fecha": "", "dias": 0, "presupuesto": 0, "gastado": 0, "estado": "Planeado", "notas": "" }],
+  "proyectos":   [{
+    "nombre": "", "tipo": "Construcción", "estado": "En curso", "presupuesto": 0,
+    "fechaInicio": "", "fechaMeta": "", "ubicacion": "", "notas": "",
+    "movimientos":   [{ "tipo": "Salida", "categoria": "Material", "concepto": "", "monto": 0, "fecha": "", "proveedor": "", "metodo": "Efectivo", "recibo": "", "notas": "" }],
+    "etapas":        [{ "nombre": "Cimentación", "presupuesto": 0, "avance": 0, "notas": "" }],
+    "presupuestoCat": { "Material": 0, "Mano de obra": 0 },
+    "proveedores":   [{ "nombre": "", "oficio": "", "contacto": "", "notas": "" }]
+  }]
 }
 ```
 

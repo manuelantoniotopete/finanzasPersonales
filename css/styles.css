@@ -201,6 +201,36 @@ tbody tr:hover { background: var(--surface-2); }
 .goal-actions { position: absolute; top: 12px; right: 12px; display: none; gap: 2px; }
 .goal:hover .goal-actions { display: flex; }
 
+/* ===== Proyectos ===== */
+.proy-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px;
+}
+.proy-section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+/* avance vs gasto */
+.dual-bar { display: grid; grid-template-columns: 54px 1fr 48px; align-items: center; gap: 12px; margin-bottom: 10px; }
+.dual-bar:last-of-type { margin-bottom: 0; }
+.dual-lbl { font-size: 12.5px; font-weight: 600; color: var(--text-soft); }
+.dual-bar b { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* etapas */
+.etapa-row {
+  display: grid; grid-template-columns: 1.4fr 1.6fr 48px auto; gap: 14px; align-items: center;
+  padding: 12px 4px; border-top: 1px solid var(--border);
+}
+.etapa-row:first-of-type { border-top: none; }
+.etapa-info { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 0; }
+.etapa-name { font-weight: 700; font-size: 14px; }
+.etapa-pct { font-size: 13px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.etapa-acts { display: flex; gap: 2px; }
+.etapa-acts .icon-btn { width: 30px; height: 30px; font-size: 14px; }
+.etapa-range { width: 100%; accent-color: var(--primary); cursor: pointer; }
+@media (max-width: 640px) {
+  .etapa-row { grid-template-columns: 1fr 44px auto; }
+  .etapa-info { grid-column: 1 / -1; }
+}
+
 /* mini-resumen de viajes en dashboard */
 .mini-trip {
   display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 16px; align-items: center;
