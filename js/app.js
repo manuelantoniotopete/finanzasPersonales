@@ -54,6 +54,9 @@
   let DATA = emptyData();
   let VIEW = "dashboard";
   let CURRENT_PROYECTO = null;        // id del proyecto abierto (vista detalle) o null (lista)
+  // Filtro de la tabla de movimientos del proyecto abierto. Se reinicia al abrir/cerrar proyecto.
+  let MOV_FILTER = { q: "", tipo: "", categoria: "", proveedor: "", etapa: "", mes: "" };
+  const emptyMovFilter = () => ({ q: "", tipo: "", categoria: "", proveedor: "", etapa: "", mes: "" });
   let CURRENT_MONTH = todayMonth();   // "YYYY-MM"
   const charts = {};                  // instancias Chart.js activas
 
@@ -226,7 +229,8 @@
         { k: "concepto", label: "Concepto", type: "text", required: true, span: 2 },
         { k: "monto", label: "Monto", type: "number", required: true },
         { k: "fecha", label: "Fecha", type: "date", default: () => isoToday() },
-        { k: "proveedor", label: "Proveedor / quién", type: "select", options: () => proveedoresOpts() },
+        { k: "proveedor", label: "Proveedor / quién", type: "text", datalist: () => proveedoresOpts() },
+        { k: "etapa", label: "Etapa (opcional)", type: "select", options: () => etapasOpts() },
         { k: "metodo", label: "Método de pago", type: "select", options: ["Efectivo", "Transferencia", "Tarjeta", "Crédito", "Otro"] },
         { k: "recibo", label: "Recibo / referencia (nota o URL)", type: "text", span: 2 },
         { k: "notas", label: "Notas", type: "textarea", span: 2 },
@@ -284,6 +288,12 @@
   function proveedoresOpts() {
     const p = proyectoActual();
     return p && Array.isArray(p.proveedores) ? p.proveedores.map((v) => v.nombre).filter(Boolean) : [];
+  }
+
+  // Opciones de etapas del proyecto actual (para vincular cada movimiento a una etapa)
+  function etapasOpts() {
+    const p = proyectoActual();
+    return p && Array.isArray(p.etapas) ? p.etapas.map((e) => e.nombre).filter(Boolean) : [];
   }
 
   // Mapea un sub-esquema a la colección dentro del proyecto
@@ -963,14 +973,26 @@
     </div>`;
   }
 
+  // Gasto real registrado en una etapa = salidas cuyo campo "etapa" coincide con su nombre.
+  function gastoEtapa(p, nombre) {
+    return sum((p.movimientos || []).filter((m) => m.tipo !== "Entrada" && m.etapa === nombre), "monto");
+  }
+
   function etapasSection(p, mt) {
     const etapas = p.etapas || [];
     const rows = etapas.map((e) => {
       const av = Math.max(0, Math.min(100, num(e.avance)));
+      const real = gastoEtapa(p, e.nombre);
+      const plan = num(e.presupuesto);
+      const over = plan > 0 && real > plan;
+      // Línea de costo: gastado vs presupuesto de la etapa (si lo tiene).
+      const costo = plan > 0
+        ? `<span class="${over ? "etapa-over" : ""}">${fmtMoney(real)} de ${fmtMoney(plan)}${over ? ` · +${fmtMoney(real - plan)}` : ""}</span>`
+        : (real > 0 ? `${fmtMoney(real)} gastado · sin presupuesto` : "sin presupuesto");
       return `<div class="etapa-row" data-id="${e.id}" data-mod="etapa">
         <div class="etapa-info">
           <span class="etapa-name">${esc(e.nombre)}</span>
-          <span class="muted">${e.presupuesto ? fmtMoney(e.presupuesto) : "sin presupuesto"}${e.notas ? " · " + esc(e.notas) : ""}</span>
+          <span class="muted">${costo}${e.notas ? " · " + esc(e.notas) : ""}</span>
         </div>
         <input type="range" min="0" max="100" value="${av}" class="etapa-range js-etapa-avance" title="Avance %">
         <span class="etapa-pct">${av}%</span>
@@ -1039,9 +1061,44 @@
     </div>`;
   }
 
-  function movimientosSection(p) {
-    const movs = (p.movimientos || []).slice().sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
-    const rows = movs.map((m) => {
+  // "2026-06" -> "Jun 2026"
+  function fmtMes(ym) {
+    const [y, m] = (ym || "").split("-").map(Number);
+    if (!y || !m) return ym || "";
+    return `${MESES[m - 1].slice(0, 3)} ${y}`;
+  }
+
+  const anyMovFilterActive = () => {
+    const f = MOV_FILTER;
+    return !!(f.q || f.tipo || f.categoria || f.proveedor || f.etapa || f.mes);
+  };
+
+  // Aplica el filtro activo a los movimientos del proyecto (ya ordenados por fecha desc).
+  function filterMovs(p) {
+    const f = MOV_FILTER;
+    const q = (f.q || "").trim().toLowerCase();
+    return (p.movimientos || []).slice()
+      .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
+      .filter((m) => {
+        if (f.tipo === "Entrada" && m.tipo !== "Entrada") return false;
+        if (f.tipo === "Salida" && m.tipo === "Entrada") return false;
+        if (f.categoria && m.categoria !== f.categoria) return false;
+        if (f.proveedor && m.proveedor !== f.proveedor) return false;
+        if (f.etapa && m.etapa !== f.etapa) return false;
+        if (f.mes && (m.fecha || "").slice(0, 7) !== f.mes) return false;
+        if (q) {
+          const hay = `${m.concepto || ""} ${m.proveedor || ""} ${m.notas || ""} ${m.recibo || ""} ${m.categoria || ""}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+  }
+
+  const movCountLabel = (shown, total) => (shown === total ? String(total) : `${shown} de ${total}`);
+
+  function movRowsHtml(movs, hasEtapas, colspan) {
+    if (!movs.length) return `<tr><td colspan="${colspan}" class="muted mov-empty">Ningún movimiento coincide con el filtro.</td></tr>`;
+    return movs.map((m) => {
       const entrada = m.tipo === "Entrada";
       const signo = entrada ? "+" : "−";
       const color = entrada ? "var(--success)" : "var(--danger)";
@@ -1050,6 +1107,7 @@
         <td><span class="pill ${entrada ? "ok" : "muted"}">${entrada ? "🟢 Entrada" : "🔴 Salida"}</span></td>
         <td><b>${esc(m.concepto)}</b></td>
         <td>${entrada ? "<span class='muted'>—</span>" : `<span class="pill muted">${esc(m.categoria) || "—"}</span>`}</td>
+        ${hasEtapas ? `<td>${esc(m.etapa) || "<span class='muted'>—</span>"}</td>` : ""}
         <td>${esc(m.proveedor) || "<span class='muted'>—</span>"}</td>
         <td>${esc(m.metodo) || "<span class='muted'>—</span>"}</td>
         <td class="t-num" style="color:${color}">${signo} ${fmtMoney(m.monto)}</td>
@@ -1057,16 +1115,84 @@
         ${actionsCell()}
       </tr>`;
     }).join("");
+  }
+
+  function movFootHtml(movs, hasEtapas) {
+    if (!movs.length) return "";
+    const entradas = sum(movs.filter((m) => m.tipo === "Entrada"), "monto");
+    const salidas = sum(movs.filter((m) => m.tipo !== "Entrada"), "monto");
+    const neto = entradas - salidas;
+    const labelSpan = hasEtapas ? 7 : 6; // columnas antes de "Monto"
+    return `<tr class="mov-foot-row">
+      <td colspan="${labelSpan}" class="t-num">Totales filtrados · <span style="color:var(--success)">+${fmtMoney(entradas)}</span> entradas · <span style="color:var(--danger)">−${fmtMoney(salidas)}</span> salidas</td>
+      <td class="t-num" style="color:${neto >= 0 ? "var(--success)" : "var(--danger)"}">${neto < 0 ? "−" : ""}${fmtMoney(Math.abs(neto))}</td>
+      <td colspan="2"></td>
+    </tr>`;
+  }
+
+  function movimientosSection(p) {
+    const all = p.movimientos || [];
+    if (!all.length) {
+      return `<div class="card">
+        <div class="card-title proy-section-head">
+          <span>Movimientos (0)</span>
+          <button class="btn btn-primary btn-sm js-add" data-mod="movimiento">＋ Movimiento</button>
+        </div>
+        <p class="muted">Sin movimientos. Registra entradas (aportaciones) y salidas (gastos) de este proyecto.</p>
+      </div>`;
+    }
+
+    const hasEtapas = (p.etapas || []).length > 0;
+    const colspan = hasEtapas ? 10 : 9;
+    const movs = filterMovs(p);
+    const f = MOV_FILTER;
+
+    // Opciones de filtro derivadas de los movimientos reales del proyecto.
+    const uniq = (key) => [...new Set(all.map((m) => m[key]).filter(Boolean))].sort();
+    const cats = uniq("categoria"), provs = uniq("proveedor"), ets = uniq("etapa");
+    const meses = [...new Set(all.map((m) => (m.fecha || "").slice(0, 7)).filter(Boolean))].sort().reverse();
+    const opt = (val, sel, label) => `<option value="${esc(val)}" ${sel === val ? "selected" : ""}>${esc(label)}</option>`;
+    const optsFrom = (arr, sel) => arr.map((v) => opt(v, sel, v)).join("");
+
+    const filterBar = `<div class="mov-filters">
+      <input type="search" class="js-mov-filter mov-search" data-fk="q" placeholder="Buscar concepto, proveedor, notas…" value="${esc(f.q)}">
+      <select class="js-mov-filter" data-fk="tipo"><option value="">Tipo: todos</option>${opt("Salida", f.tipo, "Salidas")}${opt("Entrada", f.tipo, "Entradas")}</select>
+      <select class="js-mov-filter" data-fk="categoria"><option value="">Categoría: todas</option>${optsFrom(cats, f.categoria)}</select>
+      <select class="js-mov-filter" data-fk="proveedor"><option value="">Proveedor: todos</option>${optsFrom(provs, f.proveedor)}</select>
+      ${hasEtapas ? `<select class="js-mov-filter" data-fk="etapa"><option value="">Etapa: todas</option>${optsFrom(ets, f.etapa)}</select>` : ""}
+      <select class="js-mov-filter" data-fk="mes"><option value="">Mes: todos</option>${meses.map((m) => opt(m, f.mes, fmtMes(m))).join("")}</select>
+      <button class="btn btn-ghost btn-sm js-mov-clear" type="button" ${anyMovFilterActive() ? "" : "hidden"}>✕ Limpiar</button>
+    </div>`;
+
     return `<div class="card">
       <div class="card-title proy-section-head">
-        <span>Movimientos (${movs.length})</span>
+        <span>Movimientos (<span id="movCount">${movCountLabel(movs.length, all.length)}</span>)</span>
         <button class="btn btn-primary btn-sm js-add" data-mod="movimiento">＋ Movimiento</button>
       </div>
-      ${movs.length ? `<div class="table-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Categoría</th><th>Proveedor</th><th>Método</th><th class="t-num">Monto</th><th>Recibo / notas</th><th></th></tr></thead>
-        <tbody>${rows}</tbody></table></div>`
-        : `<p class="muted">Sin movimientos. Registra entradas (aportaciones) y salidas (gastos) de este proyecto.</p>`}
+      ${filterBar}
+      <div class="table-scroll"><table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Categoría</th>${hasEtapas ? "<th>Etapa</th>" : ""}<th>Proveedor</th><th>Método</th><th class="t-num">Monto</th><th>Recibo / notas</th><th></th></tr></thead>
+        <tbody id="movTbody">${movRowsHtml(movs, hasEtapas, colspan)}</tbody>
+        <tfoot id="movFoot">${movFootHtml(movs, hasEtapas)}</tfoot>
+      </table></div>
     </div>`;
+  }
+
+  // Refresca solo la tabla de movimientos (sin re-render completo) para no perder el foco del buscador.
+  function refreshMovTable() {
+    const p = proyectoActual();
+    if (!p) return;
+    const hasEtapas = (p.etapas || []).length > 0;
+    const colspan = hasEtapas ? 10 : 9;
+    const movs = filterMovs(p);
+    const tb = document.getElementById("movTbody");
+    const ft = document.getElementById("movFoot");
+    const cnt = document.getElementById("movCount");
+    const clearBtn = document.querySelector(".js-mov-clear");
+    if (tb) tb.innerHTML = movRowsHtml(movs, hasEtapas, colspan);
+    if (ft) ft.innerHTML = movFootHtml(movs, hasEtapas);
+    if (cnt) cnt.textContent = movCountLabel(movs.length, (p.movimientos || []).length);
+    if (clearBtn) clearBtn.hidden = !anyMovFilterActive();
   }
 
   // Si el recibo parece una URL, la muestra como liga; si no, como texto.
@@ -1172,7 +1298,14 @@
         input = `<textarea id="f_${f.k}" placeholder="Opcional…">${esc(val)}</textarea>`;
       } else {
         const extra = f.type === "number" ? `step="0.01" ${f.min != null ? `min="${f.min}"` : ""} ${f.max != null ? `max="${f.max}"` : ""}` : "";
-        input = `<input id="f_${f.k}" type="${f.type}" value="${esc(val)}" ${extra} ${f.required ? "required" : ""}>`;
+        // Campo de texto con sugerencias opcionales (datalist): escribe libre o elige uno existente.
+        let listAttr = "", listEl = "";
+        if (f.datalist) {
+          const items = (typeof f.datalist === "function" ? f.datalist() : f.datalist) || [];
+          listAttr = ` list="dl_${f.k}"`;
+          listEl = `<datalist id="dl_${f.k}">${items.map((o) => `<option value="${esc(o)}"></option>`).join("")}</datalist>`;
+        }
+        input = `<input id="f_${f.k}" type="${f.type}" value="${esc(val)}" ${extra}${listAttr} ${f.required ? "required" : ""}>${listEl}`;
       }
       return `<div class="field${span}"><label for="f_${f.k}">${esc(f.label)}${f.required ? " *" : ""}</label>${input}</div>`;
     }).join("") + `</div>`;
@@ -1288,6 +1421,7 @@
     // delegación en content (add / edit / del / toggle)
     $("#content").addEventListener("click", onContentClick);
     $("#content").addEventListener("change", onContentChange);
+    $("#content").addEventListener("input", onContentInput);
 
     // modal
     $("#modalForm").addEventListener("submit", submitModal);
@@ -1304,10 +1438,13 @@
     const goto = e.target.closest(".js-goto");
     if (goto) { VIEW = goto.dataset.view; render(); return; }
 
-    // Abrir / cerrar el detalle de un proyecto.
+    // Abrir / cerrar el detalle de un proyecto (reinicia el filtro de movimientos).
     const openP = e.target.closest(".js-open-proy");
-    if (openP) { CURRENT_PROYECTO = openP.dataset.id; render(); return; }
-    if (e.target.closest(".js-back-proy")) { CURRENT_PROYECTO = null; render(); return; }
+    if (openP) { CURRENT_PROYECTO = openP.dataset.id; MOV_FILTER = emptyMovFilter(); render(); return; }
+    if (e.target.closest(".js-back-proy")) { CURRENT_PROYECTO = null; MOV_FILTER = emptyMovFilter(); render(); return; }
+
+    // Limpiar todos los filtros de la tabla de movimientos.
+    if (e.target.closest(".js-mov-clear")) { MOV_FILTER = emptyMovFilter(); render(); return; }
 
     const addBtn = e.target.closest(".js-add");
     if (addBtn) { openModal(addBtn.dataset.mod); return; }
@@ -1340,7 +1477,25 @@
     }
   }
 
+  // Actualiza el filtro de movimientos desde un control (select o input) y refresca solo la tabla.
+  function applyMovFilterControl(el) {
+    const fk = el?.dataset?.fk;
+    if (!fk || !(fk in MOV_FILTER)) return false;
+    MOV_FILTER[fk] = el.value;
+    refreshMovTable();
+    return true;
+  }
+
+  function onContentInput(e) {
+    const ctrl = e.target.closest(".js-mov-filter");
+    if (ctrl) applyMovFilterControl(ctrl);
+  }
+
   function onContentChange(e) {
+    // Filtros de la tabla de movimientos (selects).
+    const ctrl = e.target.closest(".js-mov-filter");
+    if (ctrl && applyMovFilterControl(ctrl)) return;
+
     // Slider de avance de etapa.
     const range = e.target.closest(".js-etapa-avance");
     if (range) {
@@ -1556,12 +1711,12 @@
           movimientos: [
             { id: uid(), tipo: "Entrada", categoria: "", concepto: "Aportación inicial", monto: 50000, fecha: d(1), proveedor: "", metodo: "Transferencia", recibo: "", notas: "Ahorro destinado a la obra" },
             { id: uid(), tipo: "Entrada", categoria: "", concepto: "Aportación quincena", monto: 20000, fecha: d(15), proveedor: "", metodo: "Transferencia", recibo: "", notas: "" },
-            { id: uid(), tipo: "Salida", categoria: "Material", concepto: "Cemento y varilla", monto: 18500, fecha: d(3), proveedor: "Materiales El Águila", metodo: "Efectivo", recibo: "Factura A-1203", notas: "" },
-            { id: uid(), tipo: "Salida", categoria: "Material", concepto: "Block y arena", monto: 9200, fecha: d(4), proveedor: "Materiales El Águila", metodo: "Efectivo", recibo: "", notas: "" },
-            { id: uid(), tipo: "Salida", categoria: "Mano de obra", concepto: "Albañil — semana 1", monto: 6500, fecha: d(8), proveedor: "Don Beto (albañil)", metodo: "Efectivo", recibo: "", notas: "Incluye ayudante" },
-            { id: uid(), tipo: "Salida", categoria: "Mano de obra", concepto: "Albañil — semana 2", monto: 6500, fecha: d(15), proveedor: "Don Beto (albañil)", metodo: "Efectivo", recibo: "", notas: "" },
-            { id: uid(), tipo: "Salida", categoria: "Permisos/Trámites", concepto: "Permiso de construcción", monto: 3200, fecha: d(2), proveedor: "", metodo: "Tarjeta", recibo: "", notas: "" },
-            { id: uid(), tipo: "Salida", categoria: "Renta de maquinaria", concepto: "Revolvedora 2 días", monto: 1400, fecha: d(7), proveedor: "", metodo: "Efectivo", recibo: "", notas: "" },
+            { id: uid(), tipo: "Salida", categoria: "Material", concepto: "Cemento y varilla", monto: 18500, fecha: d(3), proveedor: "Materiales El Águila", etapa: "Cimentación", metodo: "Efectivo", recibo: "Factura A-1203", notas: "" },
+            { id: uid(), tipo: "Salida", categoria: "Material", concepto: "Block y arena", monto: 9200, fecha: d(4), proveedor: "Materiales El Águila", etapa: "Muros", metodo: "Efectivo", recibo: "", notas: "" },
+            { id: uid(), tipo: "Salida", categoria: "Mano de obra", concepto: "Albañil — semana 1", monto: 6500, fecha: d(8), proveedor: "Don Beto (albañil)", etapa: "Cimentación", metodo: "Efectivo", recibo: "", notas: "Incluye ayudante" },
+            { id: uid(), tipo: "Salida", categoria: "Mano de obra", concepto: "Albañil — semana 2", monto: 6500, fecha: d(15), proveedor: "Don Beto (albañil)", etapa: "Muros", metodo: "Efectivo", recibo: "", notas: "" },
+            { id: uid(), tipo: "Salida", categoria: "Permisos/Trámites", concepto: "Permiso de construcción", monto: 3200, fecha: d(2), proveedor: "", etapa: "", metodo: "Tarjeta", recibo: "", notas: "" },
+            { id: uid(), tipo: "Salida", categoria: "Renta de maquinaria", concepto: "Revolvedora 2 días", monto: 1400, fecha: d(7), proveedor: "", etapa: "Cimentación", metodo: "Efectivo", recibo: "", notas: "" },
           ],
           etapas: [
             { id: uid(), nombre: "Cimentación", presupuesto: 25000, avance: 100, notas: "" },

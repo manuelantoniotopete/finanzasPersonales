@@ -86,7 +86,7 @@ icons/                Iconos de la app (192, 512, maskable, apple-touch)
   "proyectos":   [{
     "nombre": "", "tipo": "Construcción", "estado": "En curso", "presupuesto": 0,
     "fechaInicio": "", "fechaMeta": "", "ubicacion": "", "notas": "",
-    "movimientos":   [{ "tipo": "Salida", "categoria": "Material", "concepto": "", "monto": 0, "fecha": "", "proveedor": "", "metodo": "Efectivo", "recibo": "", "notas": "" }],
+    "movimientos":   [{ "tipo": "Salida", "categoria": "Material", "concepto": "", "monto": 0, "fecha": "", "proveedor": "", "etapa": "", "metodo": "Efectivo", "recibo": "", "notas": "" }],
     "etapas":        [{ "nombre": "Cimentación", "presupuesto": 0, "avance": 0, "notas": "" }],
     "presupuestoCat": { "Material": 0, "Mano de obra": 0 },
     "proveedores":   [{ "nombre": "", "oficio": "", "contacto": "", "notas": "" }]

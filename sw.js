@@ -3,14 +3,14 @@
    - Navegación (HTML): network-first, con index.html cacheado como respaldo offline.
    - Resto (CSS/JS/iconos/CDN): cache-first, poblando cache en segundo plano.
    Sube CACHE_VERSION cuando cambies archivos del shell para forzar actualización. */
-const CACHE_VERSION = "finanzas-v1";
+const CACHE_VERSION = "finanzas-v2";
 
 // Críticos del mismo origen (si alguno falla, la instalación falla → se reintenta).
 const CORE = [
   "./",
   "./index.html",
-  "./css/styles.css?v=2",
-  "./js/app.js?v=2",
+  "./css/styles.css?v=3",
+  "./js/app.js?v=3",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

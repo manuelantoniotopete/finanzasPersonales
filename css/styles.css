@@ -208,6 +208,20 @@ tbody tr:hover { background: var(--surface-2); }
 }
 .proy-section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 
+/* filtros de la tabla de movimientos */
+.mov-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
+.mov-filters input, .mov-filters select {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
+}
+.mov-filters input:focus, .mov-filters select:focus { outline: none; border-color: var(--primary); }
+.mov-search { flex: 1 1 220px; min-width: 160px; }
+.mov-empty { text-align: center; padding: 18px; }
+/* fila de totales al pie de la tabla de movimientos */
+.mov-foot-row td { background: var(--surface-2); font-weight: 700; border-top: 2px solid var(--border); }
+.mov-foot-row:hover td { background: var(--surface-2); }
+.etapa-over { color: var(--danger); font-weight: 700; }
+
 /* avance vs gasto */
 .dual-bar { display: grid; grid-template-columns: 54px 1fr 48px; align-items: center; gap: 12px; margin-bottom: 10px; }
 .dual-bar:last-of-type { margin-bottom: 0; }
