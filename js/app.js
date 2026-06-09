@@ -25,6 +25,11 @@
   const TIPOS_PROYECTO = ["Construcción", "Remodelación", "Negocio", "Vehículo", "Mudanza", "Evento", "Otro"];
   const ESTADOS_PROYECTO = ["Planeado", "En curso", "Pausado", "Terminado"];
 
+  // Cotizaciones (comparador de precios por insumo)
+  const ESTADOS_COTIZACION = ["Comparando", "Decidido", "Comprado"];
+  const UNIDADES = ["pieza", "bulto", "saco", "kg", "ton", "m", "m²", "m³", "litro", "millar", "rollo", "lote", "servicio"];
+  const DISPONIBILIDAD = ["En existencia", "Sobre pedido", "Agotado"];
+
   const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const mesIdx = (nombre) => MESES.indexOf(nombre) + 1; // 1..12, 0 si no aplica
@@ -49,14 +54,19 @@
                       //   movimientos:[{id,tipo,categoria,concepto,monto,fecha,proveedor,metodo,recibo,notas}],
                       //   etapas:[{id,nombre,presupuesto,avance,notas}],
                       //   presupuestoCat:{categoria:monto}, proveedores:[{id,nombre,oficio,contacto,notas}]}
+    cotizaciones: [], // {id, titulo, proyectoId, categoria, cantidad, unidad, estado, notas, fecha,
+                      //   elegidaId, movimientoId,
+                      //   opciones:[{id,proveedor,precioUnitario,costoEnvio,contacto,disponibilidad,url,fecha,notas}]}
   });
 
   let DATA = emptyData();
   let VIEW = "dashboard";
   let CURRENT_PROYECTO = null;        // id del proyecto abierto (vista detalle) o null (lista)
+  let CURRENT_COTIZACION = null;      // id de la cotización abierta (vista detalle) o null (lista)
+  let COTIZ_FILTER = { proyectoId: "" }; // filtro de la lista de cotizaciones (por proyecto)
   // Filtro de la tabla de movimientos del proyecto abierto. Se reinicia al abrir/cerrar proyecto.
-  let MOV_FILTER = { q: "", tipo: "", categoria: "", proveedor: "", etapa: "", mes: "" };
-  const emptyMovFilter = () => ({ q: "", tipo: "", categoria: "", proveedor: "", etapa: "", mes: "" });
+  let MOV_FILTER = { q: "", tipo: "", categoria: "", proveedor: "", etapa: "", fondo: "", mes: "" };
+  const emptyMovFilter = () => ({ q: "", tipo: "", categoria: "", proveedor: "", etapa: "", fondo: "", mes: "" });
   let CURRENT_MONTH = todayMonth();   // "YYYY-MM"
   const charts = {};                  // instancias Chart.js activas
 
@@ -141,7 +151,14 @@
       movimientos: Array.isArray(p.movimientos) ? p.movimientos.map((m) => ({ id: m.id || uid(), ...m })) : [],
       etapas: Array.isArray(p.etapas) ? p.etapas.map((e) => ({ id: e.id || uid(), ...e })) : [],
       proveedores: Array.isArray(p.proveedores) ? p.proveedores.map((v) => ({ id: v.id || uid(), ...v })) : [],
+      fondos: Array.isArray(p.fondos) ? p.fondos.map((f) => ({ id: f.id || uid(), ...f })) : [],
       presupuestoCat: (p.presupuestoCat && typeof p.presupuestoCat === "object") ? p.presupuestoCat : {},
+    })) : [];
+    // cotizaciones: normaliza su sub-colección de opciones
+    base.cotizaciones = Array.isArray(obj.cotizaciones) ? obj.cotizaciones.map((c) => ({
+      id: c.id || uid(),
+      ...c,
+      opciones: Array.isArray(c.opciones) ? c.opciones.map((o) => ({ id: o.id || uid(), ...o })) : [],
     })) : [];
     return base;
   }
@@ -224,7 +241,7 @@
     movimiento: {
       title: "movimiento",
       fields: [
-        { k: "tipo", label: "Tipo", type: "select", options: ["Salida", "Entrada"], required: true, default: () => "Salida" },
+        { k: "tipo", label: "Tipo", type: "select", options: ["Salida", "Entrada", "Traspaso"], required: true, default: () => "Salida" },
         { k: "categoria", label: "Categoría", type: "select", options: CAT_PROYECTO },
         { k: "concepto", label: "Concepto", type: "text", required: true, span: 2 },
         { k: "monto", label: "Monto", type: "number", required: true },
@@ -232,7 +249,17 @@
         { k: "proveedor", label: "Proveedor / quién", type: "text", datalist: () => proveedoresOpts() },
         { k: "etapa", label: "Etapa (opcional)", type: "select", options: () => etapasOpts() },
         { k: "metodo", label: "Método de pago", type: "select", options: ["Efectivo", "Transferencia", "Tarjeta", "Crédito", "Otro"] },
+        { k: "fondo", label: "Fondo (de dónde sale el dinero)", type: "select", options: () => fondosOpts() },
+        { k: "fondoDestino", label: "Fondo destino (solo para traspasos)", type: "select", options: () => fondosOpts() },
         { k: "recibo", label: "Recibo / referencia (nota o URL)", type: "text", span: 2 },
+        { k: "notas", label: "Notas", type: "textarea", span: 2 },
+      ],
+    },
+    fondo: {
+      title: "fondo / bolsa de dinero",
+      fields: [
+        { k: "nombre", label: "Nombre (BBVA, Efectivo, Tarjeta…)", type: "text", required: true, span: 2 },
+        { k: "saldoInicial", label: "Saldo disponible al iniciar", type: "number", default: () => 0 },
         { k: "notas", label: "Notas", type: "textarea", span: 2 },
       ],
     },
@@ -251,6 +278,32 @@
         { k: "nombre", label: "Nombre", type: "text", required: true, span: 2 },
         { k: "oficio", label: "Oficio / rol", type: "text" },
         { k: "contacto", label: "Teléfono / contacto", type: "text" },
+        { k: "notas", label: "Notas", type: "textarea", span: 2 },
+      ],
+    },
+    // ---- Cotizaciones (comparador) y sus opciones ----
+    cotizaciones: {
+      title: "cotización",
+      fields: [
+        { k: "titulo", label: "¿Qué vas a comprar? (insumo)", type: "text", required: true, span: 2 },
+        { k: "proyectoId", label: "Proyecto vinculado", type: "select", options: () => proyectoOpts() },
+        { k: "categoria", label: "Categoría", type: "select", options: CAT_PROYECTO },
+        { k: "cantidad", label: "Cantidad", type: "number", min: 0, default: () => 1 },
+        { k: "unidad", label: "Unidad", type: "text", datalist: () => UNIDADES, default: () => "pieza" },
+        { k: "estado", label: "Estado", type: "select", options: ESTADOS_COTIZACION, default: () => "Comparando" },
+        { k: "notas", label: "Notas / especificaciones", type: "textarea", span: 2 },
+      ],
+    },
+    opcion: {
+      title: "opción de proveedor",
+      fields: [
+        { k: "proveedor", label: "Proveedor / tienda", type: "text", required: true, span: 2, datalist: () => cotizProveedorOpts() },
+        { k: "precioUnitario", label: "Precio por unidad", type: "number", required: true, min: 0 },
+        { k: "costoEnvio", label: "Costo de envío / flete (opcional)", type: "number", min: 0 },
+        { k: "disponibilidad", label: "Disponibilidad", type: "select", options: DISPONIBILIDAD },
+        { k: "contacto", label: "Contacto (tel / vendedor)", type: "text" },
+        { k: "fecha", label: "Fecha de la cotización", type: "date", default: () => isoToday() },
+        { k: "url", label: "Liga / referencia (URL o nota)", type: "text", span: 2 },
         { k: "notas", label: "Notas", type: "textarea", span: 2 },
       ],
     },
@@ -296,8 +349,36 @@
     return p && Array.isArray(p.etapas) ? p.etapas.map((e) => e.nombre).filter(Boolean) : [];
   }
 
-  // Mapea un sub-esquema a la colección dentro del proyecto
-  const NESTED_COLL = { movimiento: "movimientos", etapa: "etapas", proveedor: "proveedores" };
+  // Opciones de fondos/bolsas de dinero del proyecto actual (de dónde sale/entra el dinero)
+  function fondosOpts() {
+    const p = proyectoActual();
+    return p && Array.isArray(p.fondos) ? p.fondos.map((f) => f.nombre).filter(Boolean) : [];
+  }
+
+  // Mapea un sub-esquema a la colección anidada y a su registro padre (proyecto o cotización).
+  const NESTED_COLL = {
+    movimiento: { coll: "movimientos", parent: proyectoActual },
+    etapa:      { coll: "etapas",      parent: proyectoActual },
+    proveedor:  { coll: "proveedores", parent: proyectoActual },
+    fondo:      { coll: "fondos",      parent: proyectoActual },
+    opcion:     { coll: "opciones",    parent: cotizacionActual },
+  };
+
+  // Opciones de proyecto para el select de cotizaciones ({value:id, label:nombre}).
+  function proyectoOpts() {
+    return DATA.proyectos.map((p) => ({ value: p.id, label: p.nombre }));
+  }
+  // Sugerencias de proveedor al capturar una opción: los del proyecto vinculado + los ya capturados.
+  function cotizProveedorOpts() {
+    const c = cotizacionActual();
+    const set = new Set();
+    if (c) {
+      const proy = proyectoById(c.proyectoId);
+      if (proy) (proy.proveedores || []).forEach((v) => v.nombre && set.add(v.nombre));
+      (c.opciones || []).forEach((o) => o.proveedor && set.add(o.proveedor));
+    }
+    return [...set];
+  }
 
   function isoToday() {
     const d = new Date();
@@ -320,11 +401,13 @@
     else if (VIEW === "ahorros")     c.innerHTML = viewAhorros();
     else if (VIEW === "viajes")      c.innerHTML = viewViajes();
     else if (VIEW === "proyectos")   c.innerHTML = CURRENT_PROYECTO ? viewProyectoDetalle() : viewProyectos();
+    else if (VIEW === "cotizaciones") c.innerHTML = CURRENT_COTIZACION ? viewCotizacionDetalle() : viewCotizaciones();
     // charts después de inyectar el HTML
     if (VIEW === "dashboard") renderDashboardCharts();
     else if (VIEW === "sueldo") renderSueldoChart();
     else if (VIEW === "viajes") renderViajesChart();
     else if (VIEW === "proyectos" && CURRENT_PROYECTO) renderProyectoCharts();
+    else if (VIEW === "cotizaciones" && CURRENT_COTIZACION) renderCotizacionChart();
     c.scrollTop = 0;
   }
 
@@ -848,10 +931,13 @@
   // Métricas agregadas de un proyecto.
   function proyMetrics(p) {
     const movs = p.movimientos || [];
-    const salidas = movs.filter((m) => m.tipo !== "Entrada");
+    const salidas = movs.filter((m) => m.tipo === "Salida");
     const aportado = sum(movs.filter((m) => m.tipo === "Entrada"), "monto");
     const gastado = sum(salidas, "monto");
-    const saldo = aportado - gastado;
+    // Dinero con el que arrancaste, repartido en tus fondos/bolsas (BBVA, efectivo…).
+    const inicial = sum(p.fondos || [], "saldoInicial");
+    // Saldo disponible real = lo que tenías al inicio + aportaciones − gastos.
+    const saldo = inicial + aportado - gastado;
     const presupuesto = num(p.presupuesto);
     const pctPres = presupuesto > 0 ? Math.round((gastado / presupuesto) * 100) : 0;
 
@@ -870,7 +956,24 @@
         ? Math.round(etapas.reduce((a, e) => a + num(e.avance) * num(e.presupuesto), 0) / peso)
         : Math.round(etapas.reduce((a, e) => a + num(e.avance), 0) / etapas.length);
     }
-    return { aportado, gastado, saldo, presupuesto, pctPres, porCat, porMes, avance, tieneEtapas: etapas.length > 0 };
+    return { aportado, gastado, saldo, inicial, presupuesto, pctPres, porCat, porMes, avance, tieneEtapas: etapas.length > 0, tieneFondos: (p.fondos || []).length > 0 };
+  }
+
+  // Saldo actual de un fondo: arranque + entradas y traspasos recibidos − gastos y traspasos salientes.
+  function fondoSaldo(p, nombre) {
+    let s = num((p.fondos || []).find((f) => f.nombre === nombre)?.saldoInicial);
+    (p.movimientos || []).forEach((m) => {
+      const amt = num(m.monto);
+      if (m.tipo === "Traspaso") {
+        if (m.fondo === nombre) s -= amt;          // sale del fondo origen
+        if (m.fondoDestino === nombre) s += amt;   // llega al fondo destino
+      } else if (m.tipo === "Entrada") {
+        if (m.fondo === nombre) s += amt;
+      } else if (m.fondo === nombre) {             // Salida
+        s -= amt;
+      }
+    });
+    return s;
   }
 
   // ---------- Vista: lista de proyectos ----------
@@ -939,8 +1042,8 @@
 
       <div class="kpi-grid">
         ${kpi("Aportado al proyecto", fmtMoney(mt.aportado), "pos", "Dinero que has metido")}
-        ${kpi("Gastado", fmtMoney(mt.gastado), "neg", `${(p.movimientos || []).filter(m => m.tipo !== "Entrada").length} salida(s)`)}
-        ${kpi("Saldo disponible", fmtMoney(mt.saldo), mt.saldo >= 0 ? "pos" : "neg", mt.saldo >= 0 ? "Te queda en el bote" : "Aportado de menos")}
+        ${kpi("Gastado", fmtMoney(mt.gastado), "neg", `${(p.movimientos || []).filter(m => m.tipo === "Salida").length} salida(s)`)}
+        ${kpi("Saldo disponible", fmtMoney(mt.saldo), mt.saldo >= 0 ? "pos" : "neg", mt.tieneFondos ? "Suma de tus fondos" : (mt.saldo >= 0 ? "Te queda en el bote" : "Aportado de menos"))}
         ${kpi("Gastado vs presupuesto", mt.presupuesto ? mt.pctPres + "%" : "—", overP ? "neg" : "", mt.presupuesto ? `${fmtMoney(mt.gastado)} de ${fmtMoney(mt.presupuesto)}` : "Sin presupuesto definido")}
         ${kpi("Avance de obra", mt.tieneEtapas ? mt.avance + "%" : "—", "", mt.tieneEtapas ? `${p.etapas.length} etapa(s)` : "Agrega etapas abajo")}
       </div>
@@ -952,11 +1055,62 @@
         <div class="card"><div class="card-title">Gasto por mes</div><div class="chart-box"><canvas id="chProyMes"></canvas></div></div>
       </div>
 
+      ${fondosSection(p, mt)}
       ${etapasSection(p, mt)}
       ${presupuestoCatSection(p, mt)}
       ${proveedoresSection(p)}
       ${movimientosSection(p)}
     `;
+  }
+
+  // Fondos / bolsas de dinero del proyecto: cuánto tenías y dónde, y cuánto queda en cada uno.
+  function fondosSection(p, mt) {
+    const fondos = p.fondos || [];
+    const movs = p.movimientos || [];
+    // Movimientos sin fondo asignado (el usuario los puede reasignar editándolos).
+    const sinAsignarGasto = sum(movs.filter((m) => m.tipo === "Salida" && !m.fondo), "monto");
+    const sinAsignarEntr = sum(movs.filter((m) => m.tipo === "Entrada" && !m.fondo), "monto");
+
+    const rows = fondos.map((fnd) => {
+      const saldo = fondoSaldo(p, fnd.nombre);
+      const ini = num(fnd.saldoInicial);
+      const gastado = sum(movs.filter((m) => m.tipo === "Salida" && m.fondo === fnd.nombre), "monto");
+      const neg = saldo < 0;
+      return `<tr data-id="${fnd.id}" data-mod="fondo">
+        <td><b>${esc(fnd.nombre)}</b></td>
+        <td class="t-num">${fmtMoney(ini)}</td>
+        <td class="t-num">${fmtMoney(gastado)}</td>
+        <td class="t-num" style="color:${neg ? "var(--danger)" : "var(--success)"}"><b>${fmtMoney(saldo)}</b>${neg ? " ⚠️" : ""}</td>
+        <td class="notes-cell">${esc(fnd.notas) || ""}</td>
+        ${actionsCell()}
+      </tr>`;
+    }).join("");
+
+    const totalSaldo = fondos.reduce((a, fnd) => a + fondoSaldo(p, fnd.nombre), 0);
+    const totalIni = sum(fondos, "saldoInicial");
+    // Aviso si hay dinero que no cuadra con los fondos (gastos/entradas sin asignar).
+    const avisoSinAsignar = (sinAsignarGasto || sinAsignarEntr)
+      ? `<p class="pill late" style="margin-top:12px">Hay movimientos sin fondo asignado${sinAsignarGasto ? ` · ${fmtMoney(sinAsignarGasto)} en gastos` : ""}${sinAsignarEntr ? ` · ${fmtMoney(sinAsignarEntr)} en entradas` : ""}. Edítalos y elige un fondo para que cuadren con tus bolsas.</p>`
+      : "";
+
+    return `<div class="card" style="margin-bottom:22px">
+      <div class="card-title proy-section-head">
+        <span>Fondos / bolsas de dinero ${fondos.length ? `· disponible ${fmtMoney(totalSaldo)}` : ""}</span>
+        <button class="btn btn-ghost btn-sm js-add" data-mod="fondo">＋ Fondo</button>
+      </div>
+      ${fondos.length ? `<div class="table-scroll"><table>
+        <thead><tr><th>Fondo</th><th class="t-num">Saldo inicial</th><th class="t-num">Gastado</th><th class="t-num">Disponible</th><th>Notas</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr class="mov-foot-row">
+          <td class="t-num"><b>Total</b></td>
+          <td class="t-num">${fmtMoney(totalIni)}</td>
+          <td class="t-num">—</td>
+          <td class="t-num" style="color:${totalSaldo >= 0 ? "var(--success)" : "var(--danger)"}"><b>${fmtMoney(totalSaldo)}</b></td>
+          <td colspan="2"></td>
+        </tr></tfoot>
+      </table></div>${avisoSinAsignar}`
+        : `<p class="muted">Agrega tus bolsas de dinero (BBVA, Efectivo, Tarjeta…) con el saldo que tienes para este proyecto. Luego, al registrar un gasto eliges de qué fondo salió y verás cuánto te queda en cada uno.</p>`}
+    </div>`;
   }
 
   // Aviso comparando avance físico vs gasto del presupuesto.
@@ -975,7 +1129,7 @@
 
   // Gasto real registrado en una etapa = salidas cuyo campo "etapa" coincide con su nombre.
   function gastoEtapa(p, nombre) {
-    return sum((p.movimientos || []).filter((m) => m.tipo !== "Entrada" && m.etapa === nombre), "monto");
+    return sum((p.movimientos || []).filter((m) => m.tipo === "Salida" && m.etapa === nombre), "monto");
   }
 
   function etapasSection(p, mt) {
@@ -1040,7 +1194,7 @@
 
   function proveedoresSection(p) {
     const vs = p.proveedores || [];
-    const pagado = (nombre) => sum((p.movimientos || []).filter((m) => m.tipo !== "Entrada" && m.proveedor === nombre), "monto");
+    const pagado = (nombre) => sum((p.movimientos || []).filter((m) => m.tipo === "Salida" && m.proveedor === nombre), "monto");
     const rows = vs.map((v) => `<tr data-id="${v.id}" data-mod="proveedor">
         <td><b>${esc(v.nombre)}</b></td>
         <td>${esc(v.oficio) || "<span class='muted'>—</span>"}</td>
@@ -1070,7 +1224,7 @@
 
   const anyMovFilterActive = () => {
     const f = MOV_FILTER;
-    return !!(f.q || f.tipo || f.categoria || f.proveedor || f.etapa || f.mes);
+    return !!(f.q || f.tipo || f.categoria || f.proveedor || f.etapa || f.fondo || f.mes);
   };
 
   // Aplica el filtro activo a los movimientos del proyecto (ya ordenados por fecha desc).
@@ -1080,11 +1234,12 @@
     return (p.movimientos || []).slice()
       .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
       .filter((m) => {
-        if (f.tipo === "Entrada" && m.tipo !== "Entrada") return false;
-        if (f.tipo === "Salida" && m.tipo === "Entrada") return false;
+        if (f.tipo && m.tipo !== f.tipo) return false;
         if (f.categoria && m.categoria !== f.categoria) return false;
         if (f.proveedor && m.proveedor !== f.proveedor) return false;
         if (f.etapa && m.etapa !== f.etapa) return false;
+        // El filtro por fondo incluye los traspasos donde el fondo es origen o destino.
+        if (f.fondo && m.fondo !== f.fondo && m.fondoDestino !== f.fondo) return false;
         if (f.mes && (m.fecha || "").slice(0, 7) !== f.mes) return false;
         if (q) {
           const hay = `${m.concepto || ""} ${m.proveedor || ""} ${m.notas || ""} ${m.recibo || ""} ${m.categoria || ""}`.toLowerCase();
@@ -1096,20 +1251,32 @@
 
   const movCountLabel = (shown, total) => (shown === total ? String(total) : `${shown} de ${total}`);
 
-  function movRowsHtml(movs, hasEtapas, colspan) {
+  // Celda de fondo para un movimiento: en traspasos muestra "origen → destino".
+  function fondoCell(m) {
+    if (m.tipo === "Traspaso") {
+      const o = esc(m.fondo) || "?", d = esc(m.fondoDestino) || "?";
+      return `<span class="muted">${o} → ${d}</span>`;
+    }
+    return esc(m.fondo) || "<span class='muted'>—</span>";
+  }
+
+  function movRowsHtml(movs, hasEtapas, hasFondos, colspan) {
     if (!movs.length) return `<tr><td colspan="${colspan}" class="muted mov-empty">Ningún movimiento coincide con el filtro.</td></tr>`;
     return movs.map((m) => {
-      const entrada = m.tipo === "Entrada";
-      const signo = entrada ? "+" : "−";
-      const color = entrada ? "var(--success)" : "var(--danger)";
+      const entrada = m.tipo === "Entrada", traspaso = m.tipo === "Traspaso";
+      const signo = traspaso ? "⇄" : entrada ? "+" : "−";
+      const color = traspaso ? "var(--muted)" : entrada ? "var(--success)" : "var(--danger)";
+      const tipoPill = traspaso ? `<span class="pill muted">🔁 Traspaso</span>`
+        : entrada ? `<span class="pill ok">🟢 Entrada</span>` : `<span class="pill muted">🔴 Salida</span>`;
       return `<tr data-id="${m.id}" data-mod="movimiento">
         <td>${fmtDate(m.fecha)}</td>
-        <td><span class="pill ${entrada ? "ok" : "muted"}">${entrada ? "🟢 Entrada" : "🔴 Salida"}</span></td>
+        <td>${tipoPill}</td>
         <td><b>${esc(m.concepto)}</b></td>
-        <td>${entrada ? "<span class='muted'>—</span>" : `<span class="pill muted">${esc(m.categoria) || "—"}</span>`}</td>
+        <td>${entrada || traspaso ? "<span class='muted'>—</span>" : `<span class="pill muted">${esc(m.categoria) || "—"}</span>`}</td>
         ${hasEtapas ? `<td>${esc(m.etapa) || "<span class='muted'>—</span>"}</td>` : ""}
         <td>${esc(m.proveedor) || "<span class='muted'>—</span>"}</td>
         <td>${esc(m.metodo) || "<span class='muted'>—</span>"}</td>
+        ${hasFondos ? `<td>${fondoCell(m)}</td>` : ""}
         <td class="t-num" style="color:${color}">${signo} ${fmtMoney(m.monto)}</td>
         <td class="notes-cell">${reciboCell(m.recibo)}${esc(m.notas) ? (m.recibo ? " · " : "") + esc(m.notas) : ""}</td>
         ${actionsCell()}
@@ -1117,14 +1284,17 @@
     }).join("");
   }
 
-  function movFootHtml(movs, hasEtapas) {
+  function movFootHtml(movs, hasEtapas, hasFondos) {
     if (!movs.length) return "";
     const entradas = sum(movs.filter((m) => m.tipo === "Entrada"), "monto");
-    const salidas = sum(movs.filter((m) => m.tipo !== "Entrada"), "monto");
+    const salidas = sum(movs.filter((m) => m.tipo === "Salida"), "monto");
+    const traspasos = sum(movs.filter((m) => m.tipo === "Traspaso"), "monto");
     const neto = entradas - salidas;
-    const labelSpan = hasEtapas ? 7 : 6; // columnas antes de "Monto"
+    // columnas antes de "Monto": base 6 (+etapa +fondo)
+    const labelSpan = 6 + (hasEtapas ? 1 : 0) + (hasFondos ? 1 : 0);
+    const traspText = traspasos ? ` · <span class="muted">⇄ ${fmtMoney(traspasos)} en traspasos</span>` : "";
     return `<tr class="mov-foot-row">
-      <td colspan="${labelSpan}" class="t-num">Totales filtrados · <span style="color:var(--success)">+${fmtMoney(entradas)}</span> entradas · <span style="color:var(--danger)">−${fmtMoney(salidas)}</span> salidas</td>
+      <td colspan="${labelSpan}" class="t-num">Totales filtrados · <span style="color:var(--success)">+${fmtMoney(entradas)}</span> entradas · <span style="color:var(--danger)">−${fmtMoney(salidas)}</span> salidas${traspText}</td>
       <td class="t-num" style="color:${neto >= 0 ? "var(--success)" : "var(--danger)"}">${neto < 0 ? "−" : ""}${fmtMoney(Math.abs(neto))}</td>
       <td colspan="2"></td>
     </tr>`;
@@ -1143,23 +1313,26 @@
     }
 
     const hasEtapas = (p.etapas || []).length > 0;
-    const colspan = hasEtapas ? 10 : 9;
+    const hasFondos = (p.fondos || []).length > 0;
+    const colspan = 9 + (hasEtapas ? 1 : 0) + (hasFondos ? 1 : 0);
     const movs = filterMovs(p);
     const f = MOV_FILTER;
 
     // Opciones de filtro derivadas de los movimientos reales del proyecto.
     const uniq = (key) => [...new Set(all.map((m) => m[key]).filter(Boolean))].sort();
     const cats = uniq("categoria"), provs = uniq("proveedor"), ets = uniq("etapa");
+    const fondos = (p.fondos || []).map((x) => x.nombre).filter(Boolean);
     const meses = [...new Set(all.map((m) => (m.fecha || "").slice(0, 7)).filter(Boolean))].sort().reverse();
     const opt = (val, sel, label) => `<option value="${esc(val)}" ${sel === val ? "selected" : ""}>${esc(label)}</option>`;
     const optsFrom = (arr, sel) => arr.map((v) => opt(v, sel, v)).join("");
 
     const filterBar = `<div class="mov-filters">
       <input type="search" class="js-mov-filter mov-search" data-fk="q" placeholder="Buscar concepto, proveedor, notas…" value="${esc(f.q)}">
-      <select class="js-mov-filter" data-fk="tipo"><option value="">Tipo: todos</option>${opt("Salida", f.tipo, "Salidas")}${opt("Entrada", f.tipo, "Entradas")}</select>
+      <select class="js-mov-filter" data-fk="tipo"><option value="">Tipo: todos</option>${opt("Salida", f.tipo, "Salidas")}${opt("Entrada", f.tipo, "Entradas")}${opt("Traspaso", f.tipo, "Traspasos")}</select>
       <select class="js-mov-filter" data-fk="categoria"><option value="">Categoría: todas</option>${optsFrom(cats, f.categoria)}</select>
       <select class="js-mov-filter" data-fk="proveedor"><option value="">Proveedor: todos</option>${optsFrom(provs, f.proveedor)}</select>
       ${hasEtapas ? `<select class="js-mov-filter" data-fk="etapa"><option value="">Etapa: todas</option>${optsFrom(ets, f.etapa)}</select>` : ""}
+      ${hasFondos ? `<select class="js-mov-filter" data-fk="fondo"><option value="">Fondo: todos</option>${optsFrom(fondos, f.fondo)}</select>` : ""}
       <select class="js-mov-filter" data-fk="mes"><option value="">Mes: todos</option>${meses.map((m) => opt(m, f.mes, fmtMes(m))).join("")}</select>
       <button class="btn btn-ghost btn-sm js-mov-clear" type="button" ${anyMovFilterActive() ? "" : "hidden"}>✕ Limpiar</button>
     </div>`;
@@ -1171,9 +1344,9 @@
       </div>
       ${filterBar}
       <div class="table-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Categoría</th>${hasEtapas ? "<th>Etapa</th>" : ""}<th>Proveedor</th><th>Método</th><th class="t-num">Monto</th><th>Recibo / notas</th><th></th></tr></thead>
-        <tbody id="movTbody">${movRowsHtml(movs, hasEtapas, colspan)}</tbody>
-        <tfoot id="movFoot">${movFootHtml(movs, hasEtapas)}</tfoot>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Categoría</th>${hasEtapas ? "<th>Etapa</th>" : ""}<th>Proveedor</th><th>Método</th>${hasFondos ? "<th>Fondo</th>" : ""}<th class="t-num">Monto</th><th>Recibo / notas</th><th></th></tr></thead>
+        <tbody id="movTbody">${movRowsHtml(movs, hasEtapas, hasFondos, colspan)}</tbody>
+        <tfoot id="movFoot">${movFootHtml(movs, hasEtapas, hasFondos)}</tfoot>
       </table></div>
     </div>`;
   }
@@ -1183,14 +1356,15 @@
     const p = proyectoActual();
     if (!p) return;
     const hasEtapas = (p.etapas || []).length > 0;
-    const colspan = hasEtapas ? 10 : 9;
+    const hasFondos = (p.fondos || []).length > 0;
+    const colspan = 9 + (hasEtapas ? 1 : 0) + (hasFondos ? 1 : 0);
     const movs = filterMovs(p);
     const tb = document.getElementById("movTbody");
     const ft = document.getElementById("movFoot");
     const cnt = document.getElementById("movCount");
     const clearBtn = document.querySelector(".js-mov-clear");
-    if (tb) tb.innerHTML = movRowsHtml(movs, hasEtapas, colspan);
-    if (ft) ft.innerHTML = movFootHtml(movs, hasEtapas);
+    if (tb) tb.innerHTML = movRowsHtml(movs, hasEtapas, hasFondos, colspan);
+    if (ft) ft.innerHTML = movFootHtml(movs, hasEtapas, hasFondos);
     if (cnt) cnt.textContent = movCountLabel(movs.length, (p.movimientos || []).length);
     if (clearBtn) clearBtn.hidden = !anyMovFilterActive();
   }
@@ -1233,6 +1407,284 @@
         options: baseOpts(col, true),
       });
     } else emptyCanvas("chProyMes");
+  }
+
+  // ============================================================
+  //  COTIZACIONES (comparador de precios)
+  // ============================================================
+  const estadoCotizPill = { "Comprado": "ok", "Decidido": "pend", "Comparando": "muted" };
+
+  function cotizacionActual() {
+    return DATA.cotizaciones.find((c) => c.id === CURRENT_COTIZACION) || null;
+  }
+  function proyectoById(id) {
+    return id ? DATA.proyectos.find((p) => p.id === id) || null : null;
+  }
+  const proyectoNombre = (id) => proyectoById(id)?.nombre || "";
+
+  // Total de una opción = precio unitario × cantidad del insumo + envío.
+  function opcionTotal(cot, o) {
+    const qty = num(cot.cantidad) || 1;
+    return num(o.precioUnitario) * qty + num(o.costoEnvio);
+  }
+
+  // Métricas de una cotización: opciones ordenadas, más barata, elegida y ahorro.
+  function cotizMetrics(cot) {
+    const ops = (cot.opciones || []).map((o) => ({ ...o, _total: opcionTotal(cot, o) }))
+      .sort((a, b) => a._total - b._total);
+    const totals = ops.map((o) => o._total);
+    const min = totals.length ? Math.min(...totals) : 0;
+    const max = totals.length ? Math.max(...totals) : 0;
+    const baratoId = ops.length ? ops[0].id : null;
+    const elegida = ops.find((o) => o.id === cot.elegidaId) || null;
+    const elegidaTotal = elegida ? elegida._total : null;
+    // Ahorro logrado al elegir = lo más caro − lo elegido. Si no hay elegida, muestra el potencial (max−min).
+    const ahorro = elegida ? (max - elegidaTotal) : (max - min);
+    return { ops, totals, min, max, baratoId, elegida, elegidaTotal, ahorro, count: ops.length };
+  }
+
+  // Lista de cotizaciones (opcionalmente filtrada por proyecto).
+  function cotizacionesFiltradas() {
+    const f = COTIZ_FILTER;
+    return DATA.cotizaciones.filter((c) => !f.proyectoId || c.proyectoId === f.proyectoId);
+  }
+
+  // ---------- Vista: lista de cotizaciones ----------
+  function viewCotizaciones() {
+    const all = DATA.cotizaciones;
+    const cs = cotizacionesFiltradas();
+
+    // KPIs: comparando, ya decididas, gasto comprometido (suma de elegidas) y ahorro acumulado.
+    let comprometido = 0, ahorroTotal = 0, decididas = 0;
+    all.forEach((c) => {
+      const mt = cotizMetrics(c);
+      if (mt.elegida) { comprometido += mt.elegidaTotal; ahorroTotal += mt.ahorro; decididas++; }
+    });
+    const comparando = all.filter((c) => c.estado === "Comparando" || !c.estado).length;
+
+    // Barra de filtro por proyecto.
+    const proyOpts = DATA.proyectos.map((p) =>
+      `<option value="${esc(p.id)}" ${COTIZ_FILTER.proyectoId === p.id ? "selected" : ""}>${esc(p.nombre)}</option>`).join("");
+    const filterBar = DATA.proyectos.length ? `<div class="mov-filters">
+      <select class="js-cotiz-filter"><option value="">Proyecto: todos</option>${proyOpts}</select>
+      ${COTIZ_FILTER.proyectoId ? `<button class="btn btn-ghost btn-sm js-cotiz-clear" type="button">✕ Limpiar</button>` : ""}
+    </div>` : "";
+
+    const cards = cs.map((c) => {
+      const mt = cotizMetrics(c);
+      const proy = proyectoNombre(c.proyectoId);
+      const cant = num(c.cantidad) || 1;
+      return `<div class="goal" data-id="${c.id}" data-mod="cotizaciones">
+        <div class="goal-actions">
+          <button class="icon-btn js-edit" title="Editar">✏️</button>
+          <button class="icon-btn js-del" title="Eliminar">🗑️</button>
+        </div>
+        <div class="goal-head"><div class="goal-name">🛒 ${esc(c.titulo)}</div></div>
+        <span class="goal-tag pill ${estadoCotizPill[c.estado] || "muted"}">${esc(c.estado) || "Comparando"}</span>
+        <span class="goal-tag">${esc(cant)} ${esc(c.unidad) || "u"}${c.categoria ? " · " + esc(c.categoria) : ""}</span>
+        ${proy ? `<span class="goal-tag">🏗️ ${esc(proy)}</span>` : ""}
+        <div class="goal-amounts">
+          ${mt.count
+            ? (mt.elegida
+                ? `Elegido <b style="color:var(--success)">${fmtMoney(mt.elegidaTotal)}</b> · ${esc(mt.elegida.proveedor)}`
+                : `Mejor precio <b>${fmtMoney(mt.min)}</b>${mt.count > 1 ? ` de ${mt.count} opciones` : ""}`)
+            : `<span class="muted">Sin opciones aún</span>`}
+        </div>
+        ${mt.count > 1 ? `<div class="goal-pct">Ahorro ${mt.elegida ? "logrado" : "potencial"}: <b style="color:var(--success)">${fmtMoney(mt.ahorro)}</b> · rango ${fmtMoney(mt.min)}–${fmtMoney(mt.max)}</div>` : ""}
+        <div class="proy-foot">
+          <span class="muted">${mt.count} opción(es)</span>
+          <button class="btn btn-primary btn-sm js-open-cotiz" data-id="${c.id}">Abrir →</button>
+        </div>
+      </div>`;
+    }).join("");
+
+    return `
+      <div class="view-head">
+        <div>
+          <div class="view-title">Cotizaciones</div>
+          <div class="view-sub">${all.length} cotización(es) · Compara proveedores y elige el que más te convenga</div>
+        </div>
+        <button class="btn btn-primary js-add" data-mod="cotizaciones">＋ Nueva cotización</button>
+      </div>
+
+      ${all.length ? `<div class="kpi-grid">
+        ${kpi("Comparando", String(comparando), "", "Pendientes de decidir")}
+        ${kpi("Decididas", String(decididas), "pos", "Ya elegiste proveedor")}
+        ${kpi("Gasto comprometido", fmtMoney(comprometido), "neg", "Suma de las opciones elegidas")}
+        ${kpi("Ahorro acumulado", fmtMoney(ahorroTotal), "pos", "Vs. la opción más cara")}
+      </div>` : ""}
+
+      ${filterBar}
+
+      ${cs.length ? `<div class="goal-grid">${cards}</div>`
+        : (all.length
+            ? `<div class="empty"><div class="empty-ico">🔎</div><h3>Sin cotizaciones en este filtro</h3><p>Cambia el filtro de proyecto o crea una nueva.</p></div>`
+            : emptyState("cotizaciones", "Sin cotizaciones aún", "Crea una cotización por cada insumo que andas cotizando (cemento, varilla…) y agrégale las opciones de cada proveedor para comparar."))}
+    `;
+  }
+
+  // ---------- Vista: detalle de una cotización ----------
+  function viewCotizacionDetalle() {
+    const c = cotizacionActual();
+    if (!c) { CURRENT_COTIZACION = null; return viewCotizaciones(); }
+    const mt = cotizMetrics(c);
+    const cant = num(c.cantidad) || 1;
+    const proy = proyectoById(c.proyectoId);
+
+    const rows = mt.ops.map((o) => {
+      const esBarato = o.id === mt.baratoId && mt.count > 1;
+      const esElegida = o.id === c.elegidaId;
+      const cls = esElegida ? "cotiz-chosen" : (esBarato ? "cotiz-best" : "");
+      const badges = `${esElegida ? `<span class="pill ok">✅ Elegido</span>` : ""}${esBarato && !esElegida ? `<span class="pill muted">💲 Más barato</span>` : ""}`;
+      return `<tr data-id="${o.id}" data-mod="opcion" class="${cls}">
+        <td><b>${esc(o.proveedor)}</b> ${badges}</td>
+        <td class="t-num">${fmtMoney(o.precioUnitario)}</td>
+        <td class="t-num">${num(o.costoEnvio) ? fmtMoney(o.costoEnvio) : "—"}</td>
+        <td class="t-num"><b>${fmtMoney(o._total)}</b></td>
+        <td>${esc(o.disponibilidad) || "<span class='muted'>—</span>"}</td>
+        <td>${esc(o.contacto) || "<span class='muted'>—</span>"}</td>
+        <td class="notes-cell">${reciboCell(o.url)}${esc(o.notas) ? (o.url ? " · " : "") + esc(o.notas) : ""}</td>
+        <td class="t-actions">
+          ${esElegida
+            ? `<button class="icon-btn js-cotiz-unelegir" title="Quitar elección">↩️</button>`
+            : `<button class="icon-btn js-cotiz-elegir" title="Elegir esta opción">✔️</button>`}
+          <button class="icon-btn js-edit" title="Editar">✏️</button>
+          <button class="icon-btn js-del" title="Eliminar">🗑️</button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    // Panel de la opción elegida + acción de registrar el gasto en el proyecto.
+    let panelElegida = "";
+    if (mt.elegida) {
+      const yaRegistrado = c.movimientoId && proy && (proy.movimientos || []).some((m) => m.id === c.movimientoId);
+      let accion;
+      if (!proy) accion = `<span class="muted">Vincula esta cotización a un proyecto (Editar) para registrar el gasto.</span>`;
+      else if (yaRegistrado) accion = `<span class="pill ok">✓ Gasto ya registrado en ${esc(proy.nombre)}</span>
+        <button class="btn btn-ghost btn-sm js-open-proy" data-id="${esc(proy.id)}">Ver proyecto →</button>`;
+      else accion = `<button class="btn btn-primary btn-sm js-cotiz-registrar">＋ Registrar como gasto en ${esc(proy.nombre)}</button>`;
+      panelElegida = `<div class="card cotiz-pick" style="margin-bottom:22px">
+        <div class="card-title">✅ Opción elegida</div>
+        <div class="goal-amounts"><b>${esc(mt.elegida.proveedor)}</b> · ${fmtMoney(mt.elegida.precioUnitario)} × ${esc(cant)} ${esc(c.unidad) || "u"}${num(mt.elegida.costoEnvio) ? " + envío " + fmtMoney(mt.elegida.costoEnvio) : ""} = <b style="color:var(--success)">${fmtMoney(mt.elegidaTotal)}</b></div>
+        <div class="proy-section-head" style="margin-top:12px">${accion}</div>
+      </div>`;
+    }
+
+    return `
+      <div class="view-head">
+        <div>
+          <button class="btn btn-ghost btn-sm js-back-cotiz">← Cotizaciones</button>
+          <div class="view-title" style="margin-top:8px">🛒 ${esc(c.titulo)}</div>
+          <div class="view-sub">
+            <span class="pill ${estadoCotizPill[c.estado] || "muted"}">${esc(c.estado) || "Comparando"}</span>
+            ${esc(cant)} ${esc(c.unidad) || "u"}
+            ${c.categoria ? " · " + esc(c.categoria) : ""}
+            ${proy ? ` · 🏗️ ${esc(proy.nombre)}` : " · <span class='muted'>sin proyecto</span>"}
+          </div>
+          ${c.notas ? `<div class="view-sub">${esc(c.notas)}</div>` : ""}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost js-edit" data-id="${c.id}" data-mod="cotizaciones">✏️ Editar</button>
+          <button class="btn btn-primary js-add" data-mod="opcion">＋ Opción</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        ${kpi("Opciones", String(mt.count), "", "Proveedores cotizados")}
+        ${kpi("Más barata", mt.count ? fmtMoney(mt.min) : "—", "pos", mt.count ? mt.ops[0].proveedor : "Agrega opciones")}
+        ${kpi("Elegida", mt.elegida ? fmtMoney(mt.elegidaTotal) : "—", mt.elegida ? "pos" : "", mt.elegida ? mt.elegida.proveedor : "Aún sin elegir")}
+        ${kpi("Ahorro", mt.count > 1 ? fmtMoney(mt.ahorro) : "—", "pos", mt.elegida ? "Logrado vs. más cara" : "Potencial (rango)")}
+      </div>
+
+      ${panelElegida}
+
+      ${mt.count > 1 ? `<div class="card" style="margin-bottom:22px"><div class="card-title">Comparativo de precios por proveedor</div><div class="chart-box"><canvas id="chCotiz"></canvas></div></div>` : ""}
+
+      <div class="card">
+        <div class="card-title proy-section-head">
+          <span>Opciones (${mt.count})</span>
+          <button class="btn btn-primary btn-sm js-add" data-mod="opcion">＋ Opción</button>
+        </div>
+        ${mt.count ? `<div class="table-scroll"><table>
+          <thead><tr><th>Proveedor</th><th class="t-num">P. unit</th><th class="t-num">Envío</th><th class="t-num">Total (${esc(cant)} ${esc(c.unidad) || "u"})</th><th>Disponibilidad</th><th>Contacto</th><th>Liga / notas</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>`
+          : `<p class="muted">Aún no hay opciones. Agrega lo que te cotizó cada proveedor (precio por unidad y envío) para compararlos.</p>`}
+      </div>
+    `;
+  }
+
+  function renderCotizacionChart() {
+    if (typeof Chart === "undefined") return;
+    const c = cotizacionActual();
+    if (!c) return;
+    const mt = cotizMetrics(c);
+    if (mt.count < 2) return;
+    const col = themeColors();
+    Chart.defaults.color = col.soft;
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    // Resalta la elegida (o la más barata) en verde; el resto en el color primario.
+    const refId = c.elegidaId || mt.baratoId;
+    mkChart("chCotiz", {
+      type: "bar",
+      data: {
+        labels: mt.ops.map((o) => o.proveedor),
+        datasets: [{
+          label: "Total",
+          data: mt.ops.map((o) => o._total),
+          backgroundColor: mt.ops.map((o) => (o.id === refId ? col.success : col.primary)),
+          borderRadius: 6,
+        }],
+      },
+      options: { ...baseOpts(col, true), indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => fmtMoney(x.raw) } } }, scales: { x: { beginAtZero: true, ticks: { callback: (v) => "$" + fmtNum(v) }, grid: { color: col.grid } }, y: { grid: { display: false } } } },
+    });
+  }
+
+  // Marca/limpia la opción elegida y ajusta el estado de la cotización.
+  function elegirOpcion(cot, opId) {
+    cot.elegidaId = opId;
+    if (opId && (cot.estado === "Comparando" || !cot.estado)) cot.estado = "Decidido";
+    if (!opId && cot.estado === "Decidido") cot.estado = "Comparando";
+    scheduleSave(); render();
+    toast(opId ? "Opción elegida" : "Elección quitada");
+  }
+
+  // Crea (o actualiza) el movimiento de gasto en el proyecto vinculado a partir de la opción elegida.
+  function registrarGastoCotizacion(cot) {
+    const proy = proyectoById(cot.proyectoId);
+    const mt = cotizMetrics(cot);
+    if (!proy || !mt.elegida) return;
+    const o = mt.elegida;
+    const cant = num(cot.cantidad) || 1;
+    proy.movimientos = proy.movimientos || [];
+    const existente = cot.movimientoId ? proy.movimientos.find((m) => m.id === cot.movimientoId) : null;
+    const datos = {
+      tipo: "Salida",
+      categoria: cot.categoria || "",
+      concepto: `${cot.titulo} (${cant} ${cot.unidad || "u"}) — ${o.proveedor}`,
+      monto: o._total,
+      fecha: o.fecha || isoToday(),
+      proveedor: o.proveedor || "",
+      etapa: existente?.etapa || "",
+      metodo: existente?.metodo || "",
+      recibo: o.url || "",
+      notas: `Desde cotización: ${cot.titulo}`,
+    };
+    if (existente) {
+      Object.assign(existente, datos);
+    } else {
+      const mov = { id: uid(), ...datos };
+      proy.movimientos.push(mov);
+      cot.movimientoId = mov.id;
+    }
+    // Registra al proveedor en el proyecto si aún no existe (para el resumen de pagos por proveedor).
+    if (o.proveedor && !(proy.proveedores || []).some((v) => v.nombre === o.proveedor)) {
+      proy.proveedores = proy.proveedores || [];
+      proy.proveedores.push({ id: uid(), nombre: o.proveedor, oficio: "Proveedor", contacto: o.contacto || "", notas: "" });
+    }
+    cot.estado = "Comprado";
+    scheduleSave(); render();
+    toast(existente ? "Gasto actualizado en el proyecto" : "Gasto registrado en el proyecto");
   }
 
   // ---------- Helpers de vista ----------
@@ -1292,7 +1744,12 @@
       let input;
       if (f.type === "select") {
         const optionList = typeof f.options === "function" ? f.options() : f.options;
-        const opts = ['<option value="">—</option>'].concat(optionList.map((o) => `<option ${val === o ? "selected" : ""}>${esc(o)}</option>`)).join("");
+        // Opciones simples (string) o {value,label} cuando el texto difiere del valor guardado.
+        const opts = ['<option value="">—</option>'].concat(optionList.map((o) => {
+          const ov = (o && typeof o === "object") ? o.value : o;
+          const ol = (o && typeof o === "object") ? o.label : o;
+          return `<option value="${esc(ov)}" ${String(val) === String(ov) ? "selected" : ""}>${esc(ol)}</option>`;
+        })).join("");
         input = `<select id="f_${f.k}">${opts}</select>`;
       } else if (f.type === "textarea") {
         input = `<textarea id="f_${f.k}" placeholder="Opcional…">${esc(val)}</textarea>`;
@@ -1358,23 +1815,24 @@
       else rec[f.k] = el.value.trim();
     }
 
-    // ¿Es un sub-registro de proyecto (movimiento/etapa/proveedor)?
-    const coll = NESTED_COLL[mod];
+    // ¿Es un sub-registro anidado (movimiento/etapa/proveedor en proyecto, opción en cotización)?
+    const meta = NESTED_COLL[mod];
     let list;
-    if (coll) {
-      const p = proyectoActual();
-      if (!p) { closeModal(); return; }
-      list = p[coll] || (p[coll] = []);
+    if (meta) {
+      const parent = meta.parent();
+      if (!parent) { closeModal(); return; }
+      list = parent[meta.coll] || (parent[meta.coll] = []);
     } else {
       list = DATA[mod];
     }
 
     const idx = list.findIndex((r) => r.id === id);
     if (idx >= 0) {
-      // Al editar un proyecto, conserva sus sub-colecciones (no están en el formulario).
-      list[idx] = mod === "proyectos" ? { ...list[idx], ...rec } : rec;
+      // Al editar proyecto/cotización, conserva sus sub-colecciones (no están en el formulario).
+      list[idx] = (mod === "proyectos" || mod === "cotizaciones") ? { ...list[idx], ...rec } : rec;
     } else {
-      if (mod === "proyectos") { rec.movimientos = []; rec.etapas = []; rec.proveedores = []; rec.presupuestoCat = {}; }
+      if (mod === "proyectos") { rec.movimientos = []; rec.etapas = []; rec.proveedores = []; rec.fondos = []; rec.presupuestoCat = {}; }
+      if (mod === "cotizaciones") { rec.opciones = []; rec.elegidaId = ""; rec.movimientoId = ""; rec.fecha = isoToday(); }
       list.push(rec);
     }
     scheduleSave();
@@ -1393,6 +1851,7 @@
       if (!b) return;
       VIEW = b.dataset.view;
       CURRENT_PROYECTO = null;     // siempre entra a la lista de proyectos
+      CURRENT_COTIZACION = null;   // …y a la lista de cotizaciones
       closeNav();
       render();
     });
@@ -1440,11 +1899,25 @@
 
     // Abrir / cerrar el detalle de un proyecto (reinicia el filtro de movimientos).
     const openP = e.target.closest(".js-open-proy");
-    if (openP) { CURRENT_PROYECTO = openP.dataset.id; MOV_FILTER = emptyMovFilter(); render(); return; }
+    if (openP) { VIEW = "proyectos"; CURRENT_COTIZACION = null; CURRENT_PROYECTO = openP.dataset.id; MOV_FILTER = emptyMovFilter(); render(); return; }
     if (e.target.closest(".js-back-proy")) { CURRENT_PROYECTO = null; MOV_FILTER = emptyMovFilter(); render(); return; }
 
     // Limpiar todos los filtros de la tabla de movimientos.
     if (e.target.closest(".js-mov-clear")) { MOV_FILTER = emptyMovFilter(); render(); return; }
+
+    // Abrir / cerrar el detalle de una cotización.
+    const openC = e.target.closest(".js-open-cotiz");
+    if (openC) { CURRENT_COTIZACION = openC.dataset.id; render(); return; }
+    if (e.target.closest(".js-back-cotiz")) { CURRENT_COTIZACION = null; render(); return; }
+    if (e.target.closest(".js-cotiz-clear")) { COTIZ_FILTER.proyectoId = ""; render(); return; }
+
+    // Elegir / quitar elección de una opción dentro de una cotización.
+    const elegir = e.target.closest(".js-cotiz-elegir");
+    if (elegir) { const c = cotizacionActual(); const id_ = e.target.closest("[data-id]")?.dataset.id; if (c && id_) elegirOpcion(c, id_); return; }
+    if (e.target.closest(".js-cotiz-unelegir")) { const c = cotizacionActual(); if (c) elegirOpcion(c, ""); return; }
+
+    // Registrar la opción elegida como gasto en el proyecto vinculado.
+    if (e.target.closest(".js-cotiz-registrar")) { const c = cotizacionActual(); if (c) registrarGastoCotizacion(c); return; }
 
     const addBtn = e.target.closest(".js-add");
     if (addBtn) { openModal(addBtn.dataset.mod); return; }
@@ -1454,23 +1927,24 @@
     const id = row.dataset.id;
     const mod = row.dataset.mod || currentMod();
 
-    // La colección puede ser global (DATA[mod]) o anidada dentro del proyecto actual.
-    const coll = NESTED_COLL[mod];
-    const getList = () => coll ? (proyectoActual()?.[coll] || []) : DATA[mod];
+    // La colección puede ser global (DATA[mod]) o anidada dentro de su registro padre.
+    const meta = NESTED_COLL[mod];
+    const getList = () => meta ? (meta.parent()?.[meta.coll] || []) : DATA[mod];
 
     if (e.target.closest(".js-edit")) {
       const rec = getList().find((r) => r.id === id);
       if (rec) openModal(mod, rec);
     } else if (e.target.closest(".js-del")) {
       const rec = getList().find((r) => r.id === id);
-      const name = rec?.concepto || rec?.nombre || "este registro";
+      const name = rec?.concepto || rec?.nombre || rec?.titulo || rec?.proveedor || "este registro";
       if (confirm(`¿Eliminar "${name}"? Esta acción no se puede deshacer.`)) {
-        if (coll) {
-          const p = proyectoActual();
-          if (p) p[coll] = p[coll].filter((r) => r.id !== id);
+        if (meta) {
+          const parent = meta.parent();
+          if (parent) parent[meta.coll] = parent[meta.coll].filter((r) => r.id !== id);
         } else {
           DATA[mod] = DATA[mod].filter((r) => r.id !== id);
           if (mod === "proyectos" && CURRENT_PROYECTO === id) CURRENT_PROYECTO = null;
+          if (mod === "cotizaciones" && CURRENT_COTIZACION === id) CURRENT_COTIZACION = null;
         }
         scheduleSave(); render(); toast("Registro eliminado");
       }
@@ -1492,6 +1966,10 @@
   }
 
   function onContentChange(e) {
+    // Filtro de la lista de cotizaciones por proyecto.
+    const cf = e.target.closest(".js-cotiz-filter");
+    if (cf) { COTIZ_FILTER.proyectoId = cf.value; render(); return; }
+
     // Filtros de la tabla de movimientos (selects).
     const ctrl = e.target.closest(".js-mov-filter");
     if (ctrl && applyMovFilterControl(ctrl)) return;
@@ -1513,7 +1991,7 @@
   }
 
   function currentMod() {
-    return ({ pagos: "pagos", recurrentes: "recurrentes", ingresos: "ingresos", ahorros: "ahorros", viajes: "viajes", proyectos: "proyectos" })[VIEW] || "pagos";
+    return ({ pagos: "pagos", recurrentes: "recurrentes", ingresos: "ingresos", ahorros: "ahorros", viajes: "viajes", proyectos: "proyectos", cotizaciones: "cotizaciones" })[VIEW] || "pagos";
   }
 
   // ---------- Import / Export ----------

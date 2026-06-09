@@ -222,6 +222,15 @@ tbody tr:hover { background: var(--surface-2); }
 .mov-foot-row:hover td { background: var(--surface-2); }
 .etapa-over { color: var(--danger); font-weight: 700; }
 
+/* ===== Cotizaciones (comparador) ===== */
+.cotiz-best td { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.cotiz-best:hover td { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.cotiz-chosen td { background: var(--success-bg); }
+.cotiz-chosen:hover td { background: var(--success-bg); }
+.cotiz-chosen td:first-child { box-shadow: inset 3px 0 0 var(--success); }
+.cotiz-pick { border-color: var(--success); }
+.cotiz-pick .proy-section-head { flex-wrap: wrap; gap: 10px; }
+
 /* avance vs gasto */
 .dual-bar { display: grid; grid-template-columns: 54px 1fr 48px; align-items: center; gap: 12px; margin-bottom: 10px; }
 .dual-bar:last-of-type { margin-bottom: 0; }
