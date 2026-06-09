@@ -201,6 +201,37 @@ tbody tr:hover { background: var(--surface-2); }
 .goal-actions { position: absolute; top: 12px; right: 12px; display: none; gap: 2px; }
 .goal:hover .goal-actions { display: flex; }
 
+/* ===== Abonos de metas de ahorro ===== */
+.goal-foot { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.abonos-box {
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.abono-row {
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center;
+  gap: 10px; padding: 6px 4px; border-radius: 8px; font-size: 13px;
+}
+.abono-row:hover { background: var(--surface-2); }
+.abono-date { color: var(--text-soft); white-space: nowrap; }
+.abono-amt { font-weight: 700; white-space: nowrap; }
+.abono-note { color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.abono-acts { display: none; gap: 2px; }
+.abono-row:hover .abono-acts { display: flex; }
+
+/* Tips / insights de una meta */
+.tips { display: flex; flex-direction: column; gap: 12px; }
+.tip-row { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; font-size: 13.5px; line-height: 1.5; }
+.tip-row .pill { white-space: nowrap; }
+.tip-row b { color: var(--text); }
+
+/* Hitos de avance (25/50/75/100) */
+.hito-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.hito {
+  flex: 1; text-align: center; font-size: 12px; font-weight: 700; padding: 5px 0;
+  border-radius: 8px; background: var(--surface-2); color: var(--text-soft);
+}
+.hito-on { background: var(--success-bg); color: var(--success); }
+
 /* ===== Proyectos ===== */
 .proy-foot {
   display: flex; justify-content: space-between; align-items: center;
@@ -378,6 +409,7 @@ tbody tr:hover { background: var(--surface-2); }
   .goal-grid { grid-template-columns: 1fr; }
   /* Acciones siempre visibles en touch (no hay hover) */
   .goal-actions { display: flex; position: static; justify-content: flex-end; margin-bottom: 4px; }
+  .abono-acts { display: flex; }
 
   /* Topbar compacto */
   .month-input { padding: 6px 8px; font-size: 13px; }

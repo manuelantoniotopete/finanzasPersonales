@@ -63,6 +63,8 @@
   let VIEW = "dashboard";
   let CURRENT_PROYECTO = null;        // id del proyecto abierto (vista detalle) o null (lista)
   let CURRENT_COTIZACION = null;      // id de la cotización abierta (vista detalle) o null (lista)
+  let CURRENT_AHORRO = null;          // id de la meta sobre la que se agrega/edita un abono (transitorio, para el modal)
+  let OPEN_AHORRO = null;             // id de la meta abierta en vista detalle, o null (lista)
   let COTIZ_FILTER = { proyectoId: "" }; // filtro de la lista de cotizaciones (por proyecto)
   // Filtro de la tabla de movimientos del proyecto abierto. Se reinicia al abrir/cerrar proyecto.
   let MOV_FILTER = { q: "", tipo: "", categoria: "", proveedor: "", etapa: "", fondo: "", mes: "" };
@@ -138,9 +140,22 @@
     const base = emptyData();
     if (!obj || typeof obj !== "object") return base;
     base.moneda = obj.moneda || "MXN";
-    for (const k of ["pagos", "recurrentes", "ingresos", "ahorros", "viajes", "bonos"]) {
+    for (const k of ["pagos", "recurrentes", "ingresos", "viajes", "bonos"]) {
       base[k] = Array.isArray(obj[k]) ? obj[k].map((r) => ({ id: r.id || uid(), ...r })) : [];
     }
+    // ahorros: cada meta lleva su historial de abonos; el total "ahorrado" se calcula de ahí.
+    base.ahorros = Array.isArray(obj.ahorros) ? obj.ahorros.map((a) => {
+      const rec = { id: a.id || uid(), ...a };
+      if (Array.isArray(a.abonos)) {
+        rec.abonos = a.abonos.map((x) => ({ id: x.id || uid(), ...x }));
+      } else {
+        // Migración: lo que ya tenías ahorrado se vuelve un primer abono "Saldo inicial" (fechado hoy).
+        const ini = num(a.ahorrado);
+        rec.abonos = ini ? [{ id: uid(), tipo: "Abono", monto: ini, fecha: isoToday(), notas: "Saldo inicial" }] : [];
+      }
+      recalcAhorrado(rec);
+      return rec;
+    }) : [];
     // Perfil de sueldo: mezcla con los defaults para no perder llaves nuevas.
     base.sueldo = (obj.sueldo && typeof obj.sueldo === "object")
       ? { ...base.sueldo, ...obj.sueldo } : base.sueldo;
@@ -207,9 +222,17 @@
         { k: "nombre", label: "Nombre", type: "text", required: true, span: 2 },
         { k: "tipo", label: "Tipo", type: "select", options: ["Meta", "Proyecto", "Viaje", "Fondo emergencia"] },
         { k: "objetivo", label: "Objetivo", type: "number", required: true },
-        { k: "ahorrado", label: "Ahorrado", type: "number" },
         { k: "fechaMeta", label: "Fecha meta", type: "date" },
         { k: "notas", label: "Notas", type: "textarea", span: 2 },
+      ],
+    },
+    abono: {
+      title: "abono",
+      fields: [
+        { k: "tipo", label: "Tipo", type: "select", options: ["Abono", "Retiro"], required: true, default: () => "Abono" },
+        { k: "monto", label: "Monto", type: "number", required: true },
+        { k: "fecha", label: "Fecha", type: "date", default: () => isoToday() },
+        { k: "notas", label: "Nota (ej. quincena, aguinaldo…)", type: "text", span: 2 },
       ],
     },
     viajes: {
@@ -355,13 +378,27 @@
     return p && Array.isArray(p.fondos) ? p.fondos.map((f) => f.nombre).filter(Boolean) : [];
   }
 
-  // Mapea un sub-esquema a la colección anidada y a su registro padre (proyecto o cotización).
+  // Meta de ahorro sobre la que se está agregando/editando un abono.
+  function ahorroActual() {
+    return DATA.ahorros.find((a) => a.id === CURRENT_AHORRO) || null;
+  }
+
+  // Recalcula el total ahorrado de una meta a partir de sus abonos (abonos − retiros).
+  function recalcAhorrado(a) {
+    if (!a) return 0;
+    const abs = a.abonos || [];
+    a.ahorrado = sum(abs.filter((x) => x.tipo !== "Retiro"), "monto") - sum(abs.filter((x) => x.tipo === "Retiro"), "monto");
+    return a.ahorrado;
+  }
+
+  // Mapea un sub-esquema a la colección anidada y a su registro padre (proyecto, cotización o meta).
   const NESTED_COLL = {
     movimiento: { coll: "movimientos", parent: proyectoActual },
     etapa:      { coll: "etapas",      parent: proyectoActual },
     proveedor:  { coll: "proveedores", parent: proyectoActual },
     fondo:      { coll: "fondos",      parent: proyectoActual },
     opcion:     { coll: "opciones",    parent: cotizacionActual },
+    abono:      { coll: "abonos",      parent: ahorroActual },
   };
 
   // Opciones de proyecto para el select de cotizaciones ({value:id, label:nombre}).
@@ -398,7 +435,7 @@
     else if (VIEW === "recurrentes") c.innerHTML = viewRecurrentes();
     else if (VIEW === "ingresos")    c.innerHTML = viewIngresos();
     else if (VIEW === "sueldo")      c.innerHTML = viewSueldo();
-    else if (VIEW === "ahorros")     c.innerHTML = viewAhorros();
+    else if (VIEW === "ahorros")     c.innerHTML = OPEN_AHORRO ? viewAhorroDetalle() : viewAhorros();
     else if (VIEW === "viajes")      c.innerHTML = viewViajes();
     else if (VIEW === "proyectos")   c.innerHTML = CURRENT_PROYECTO ? viewProyectoDetalle() : viewProyectos();
     else if (VIEW === "cotizaciones") c.innerHTML = CURRENT_COTIZACION ? viewCotizacionDetalle() : viewCotizaciones();
@@ -407,6 +444,7 @@
     else if (VIEW === "sueldo") renderSueldoChart();
     else if (VIEW === "viajes") renderViajesChart();
     else if (VIEW === "proyectos" && CURRENT_PROYECTO) renderProyectoCharts();
+    else if (VIEW === "ahorros" && OPEN_AHORRO) renderAhorroCharts();
     else if (VIEW === "cotizaciones" && CURRENT_COTIZACION) renderCotizacionChart();
     c.scrollTop = 0;
   }
@@ -825,6 +863,25 @@
   }
 
   // ---------- Vista: Ahorros ----------
+  // Historial de abonos/retiros de una meta (se muestra al desplegar la tarjeta).
+  function abonosHistory(a) {
+    const abs = (a.abonos || []).slice().sort((x, y) => (y.fecha || "").localeCompare(x.fecha || ""));
+    if (!abs.length) return `<div class="abonos-box"><p class="muted" style="margin:0">Sin abonos aún. Usa “＋ Abono”.</p></div>`;
+    const rows = abs.map((x) => {
+      const ret = x.tipo === "Retiro";
+      return `<div class="abono-row" data-id="${x.id}" data-mod="abono" data-parent="${a.id}">
+        <span class="abono-date">${fmtDate(x.fecha)}</span>
+        <span class="abono-amt" style="color:${ret ? "var(--danger)" : "var(--success)"}">${ret ? "−" : "+"} ${fmtMoney(x.monto)}</span>
+        <span class="abono-note">${esc(x.notas) || (ret ? "Retiro" : "Abono")}</span>
+        <span class="abono-acts">
+          <button class="icon-btn js-edit" title="Editar">✏️</button>
+          <button class="icon-btn js-del" title="Eliminar">🗑️</button>
+        </span>
+      </div>`;
+    }).join("");
+    return `<div class="abonos-box">${rows}</div>`;
+  }
+
   function viewAhorros() {
     const as = DATA.ahorros;
     const cards = as.map((a) => {
@@ -832,6 +889,7 @@
       const pct = obj > 0 ? Math.min(100, Math.round((ah / obj) * 100)) : 0;
       const done = obj > 0 && ah >= obj;
       const falta = Math.max(0, obj - ah);
+      const nAbonos = (a.abonos || []).length;
       return `<div class="goal" data-id="${a.id}">
         <div class="goal-actions">
           <button class="icon-btn js-edit" title="Editar">✏️</button>
@@ -845,6 +903,10 @@
         <div class="bar ${done ? "done" : ""}"><span style="width:${pct}%"></span></div>
         <div class="goal-pct">${pct}%${done ? " 🎉 ¡Completado!" : ""}</div>
         ${a.notas ? `<div class="goal-amounts" style="margin-top:10px">${esc(a.notas)}</div>` : ""}
+        <div class="goal-foot">
+          <button class="btn btn-ghost btn-sm js-add-abono" data-id="${a.id}">＋ Abono</button>
+          <button class="btn btn-primary btn-sm js-open-ahorro" data-id="${a.id}">Abrir${nAbonos ? ` · ${nAbonos} abono(s)` : ""} →</button>
+        </div>
       </div>`;
     }).join("");
 
@@ -858,6 +920,220 @@
       </div>
       ${as.length ? `<div class="goal-grid">${cards}</div>` : emptyState("ahorros", "Sin metas de ahorro", "Crea metas, proyectos o viajes para darles seguimiento.")}
     `;
+  }
+
+  // ---------- Detalle de una meta de ahorro ----------
+  function ahorroAbierto() {
+    return DATA.ahorros.find((a) => a.id === OPEN_AHORRO) || null;
+  }
+
+  // Días entre dos fechas ISO ("YYYY-MM-DD"); positivo si b es posterior a a.
+  function diasEntre(a, b) {
+    const da = Date.parse(a), db = Date.parse(b);
+    if (isNaN(da) || isNaN(db)) return 0;
+    return (db - da) / 86400000;
+  }
+  // Suma N meses a hoy y devuelve "YYYY-MM".
+  function mesDesdeHoy(nMeses) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + nMeses);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  // Métricas e insights de una meta: ritmo histórico, pronóstico, requerido/mes, hitos y rachas.
+  function ahorroInsights(a) {
+    const obj = num(a.objetivo), ah = num(a.ahorrado);
+    const falta = Math.max(0, obj - ah);
+    const pct = obj > 0 ? Math.min(100, Math.round((ah / obj) * 100)) : 0;
+    const completed = obj > 0 && ah >= obj;
+
+    const abonos = (a.abonos || []).slice().sort((x, y) => (x.fecha || "").localeCompare(y.fecha || ""));
+    const aportes = abonos.filter((x) => x.tipo !== "Retiro");
+    const hoy = isoToday();
+    const firstDate = abonos.length ? abonos[0].fecha : null;
+
+    // Ritmo histórico mensual (neto): ahorrado / meses transcurridos desde el primer abono.
+    let ritmoMensual = 0, mesesTranscurridos = 0;
+    if (firstDate) {
+      mesesTranscurridos = Math.max(0, diasEntre(firstDate, hoy)) / 30.4375;
+      if (mesesTranscurridos >= 0.5 && ah > 0) ritmoMensual = ah / mesesTranscurridos;
+    }
+
+    // Pronóstico de fecha al ritmo histórico.
+    let pronostico = null;
+    if (!completed && ritmoMensual > 0) pronostico = mesDesdeHoy(Math.ceil(falta / ritmoMensual));
+
+    // Cuánto abonar al mes para llegar a la fecha meta.
+    let requeridoMensual = null, mesesRestantes = null, metaVencida = false;
+    if (!completed && a.fechaMeta) {
+      mesesRestantes = diasEntre(hoy, a.fechaMeta) / 30.4375;
+      if (mesesRestantes > 0) requeridoMensual = falta / mesesRestantes;
+      else metaVencida = true;
+    }
+
+    // Hitos 25/50/75/100.
+    const HITOS = [25, 50, 75, 100];
+    const siguienteHito = HITOS.find((h) => pct < h) || null;
+    const montoSiguiente = siguienteHito ? Math.max(0, (obj * siguienteHito) / 100 - ah) : 0;
+
+    // Racha: meses consecutivos con al menos un abono, hasta el mes más reciente con abono.
+    const mesesConAbono = [...new Set(aportes.map((x) => (x.fecha || "").slice(0, 7)).filter(Boolean))].sort();
+    let racha = 0;
+    if (mesesConAbono.length) {
+      racha = 1;
+      for (let i = mesesConAbono.length - 1; i > 0; i--) {
+        if (shiftMonth(mesesConAbono[i], -1) === mesesConAbono[i - 1]) racha++; else break;
+      }
+    }
+    const mejorAbono = aportes.reduce((m, x) => Math.max(m, num(x.monto)), 0);
+
+    return {
+      obj, ah, falta, pct, completed, ritmoMensual, pronostico,
+      requeridoMensual, mesesRestantes, metaVencida,
+      siguienteHito, montoSiguiente, racha, mejorAbono,
+      numAbonos: abonos.length, numAportes: aportes.length,
+    };
+  }
+
+  // Una "píldora" de tip con tono e icono.
+  const tipRow = (tono, ico, html) => `<div class="tip-row"><span class="pill ${tono}">${ico}</span><span>${html}</span></div>`;
+
+  function ahorroTips(ins, a) {
+    const tips = [];
+    // 1) Pronóstico de fecha
+    if (ins.completed) {
+      tips.push(tipRow("ok", "🎉", `<b>¡Meta completada!</b> Juntaste ${fmtMoney(ins.ah)} de ${fmtMoney(ins.obj)}.`));
+    } else if (ins.pronostico) {
+      tips.push(tipRow("ok", "📅", `A tu ritmo histórico (~${fmtMoney(ins.ritmoMensual)}/mes) llegas a tu objetivo aprox. en <b>${esc(monthLabel(ins.pronostico))}</b>.`));
+    } else {
+      tips.push(tipRow("muted", "📅", `Aún no puedo estimar tu fecha de llegada. Registra abonos en distintos meses y aquí verás el pronóstico.`));
+    }
+    // 2) Cuánto abonar al mes para la fecha meta
+    if (!ins.completed) {
+      if (!a.fechaMeta) {
+        tips.push(tipRow("muted", "🎯", `Define una <b>fecha meta</b> (editando la meta) para calcular cuánto necesitas abonar al mes.`));
+      } else if (ins.metaVencida) {
+        tips.push(tipRow("late", "⏰", `Tu fecha meta (${fmtDate(a.fechaMeta)}) ya pasó y aún faltan ${fmtMoney(ins.falta)}. ${ins.pronostico ? `A tu ritmo, la alcanzarías en ${esc(monthLabel(ins.pronostico))}.` : ""}`));
+      } else {
+        const acelera = ins.ritmoMensual > 0 && ins.requeridoMensual > ins.ritmoMensual;
+        const buenRitmo = ins.ritmoMensual > 0 && ins.ritmoMensual >= ins.requeridoMensual;
+        let extra = "";
+        if (buenRitmo) extra = ` Vas con buen ritmo 👍`;
+        else if (acelera) extra = ` Te falta ~${fmtMoney(ins.requeridoMensual - ins.ritmoMensual)}/mes más que tu ritmo actual.`;
+        tips.push(tipRow(acelera ? "late" : "ok", "🎯", `Para llegar el <b>${fmtDate(a.fechaMeta)}</b> necesitas abonar ~<b>${fmtMoney(ins.requeridoMensual)}/mes</b>.${extra}`));
+      }
+    }
+    // 3) Hitos
+    if (!ins.completed && ins.siguienteHito) {
+      tips.push(tipRow("pend", "🏁", `Siguiente hito: <b>${ins.siguienteHito}%</b> — te faltan ${fmtMoney(ins.montoSiguiente)} para alcanzarlo.`));
+    }
+    // 4) Racha / logros
+    if (ins.racha > 1) {
+      tips.push(tipRow("ok", "🔥", `Llevas <b>${ins.racha} meses seguidos</b> abonando. ¡Sigue así!`));
+    }
+    if (ins.mejorAbono > 0) {
+      tips.push(tipRow("muted", "⭐", `Tu mejor abono fue de <b>${fmtMoney(ins.mejorAbono)}</b> · ${ins.numAbonos} movimiento(s) en total.`));
+    }
+    return tips.join("");
+  }
+
+  function viewAhorroDetalle() {
+    const a = ahorroAbierto();
+    if (!a) { OPEN_AHORRO = null; return viewAhorros(); }
+    const ins = ahorroInsights(a);
+    const hitosBadges = [25, 50, 75, 100].map((h) =>
+      `<span class="hito ${ins.pct >= h ? "hito-on" : ""}">${h}%</span>`).join("");
+
+    return `
+      <div class="view-head">
+        <div>
+          <button class="btn btn-ghost btn-sm js-back-ahorro">← Ahorros</button>
+          <div class="view-title" style="margin-top:8px">${esc(a.nombre)}</div>
+          <div class="view-sub">
+            <span class="goal-tag">${esc(a.tipo) || "Meta"}</span>
+            ${a.fechaMeta ? " · 🎯 meta " + fmtDate(a.fechaMeta) : ""}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost js-edit" data-id="${a.id}" data-mod="ahorros">✏️ Editar</button>
+          <button class="btn btn-primary js-add-abono" data-id="${a.id}">＋ Abono</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        ${kpi("Ahorrado", fmtMoney(ins.ah), "pos", `${ins.pct}% del objetivo`)}
+        ${kpi("Objetivo", fmtMoney(ins.obj), "", a.fechaMeta ? "meta " + fmtDate(a.fechaMeta) : "Sin fecha meta")}
+        ${kpi("Te falta", fmtMoney(ins.falta), ins.falta > 0 ? "neg" : "pos", ins.completed ? "¡Completado! 🎉" : "para tu objetivo")}
+        ${kpi("Ritmo histórico", ins.ritmoMensual > 0 ? fmtMoney(ins.ritmoMensual) + "/mes" : "—", "", ins.ritmoMensual > 0 ? "promedio mensual" : "Falta historial")}
+        ${kpi("Pronóstico", ins.completed ? "🎉" : (ins.pronostico ? esc(monthLabel(ins.pronostico)) : "—"), ins.completed ? "pos" : "", ins.completed ? "Meta lograda" : (ins.pronostico ? "fecha estimada" : "Sin estimación aún"))}
+      </div>
+
+      <div class="card" style="margin-bottom:22px">
+        <div class="card-title">Avance hacia tu objetivo</div>
+        <div class="bar ${ins.completed ? "done" : ""}" style="height:14px"><span style="width:${ins.pct}%"></span></div>
+        <div class="hito-row">${hitosBadges}</div>
+      </div>
+
+      <div class="card" style="margin-bottom:22px">
+        <div class="card-title">💡 Tips e insights</div>
+        <div class="tips">${ahorroTips(ins, a)}</div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="card"><div class="card-title">Ahorro acumulado</div><div class="chart-box"><canvas id="chAhorroAcum"></canvas></div></div>
+        <div class="card"><div class="card-title">Abonos por mes</div><div class="chart-box"><canvas id="chAhorroMes"></canvas></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title proy-section-head">
+          <span>Abonos (${ins.numAbonos})</span>
+          <button class="btn btn-primary btn-sm js-add-abono" data-id="${a.id}">＋ Abono</button>
+        </div>
+        ${abonosHistory(a)}
+      </div>
+    `;
+  }
+
+  function renderAhorroCharts() {
+    if (typeof Chart === "undefined") return;
+    const a = ahorroAbierto();
+    if (!a) return;
+    const col = themeColors();
+    Chart.defaults.color = col.soft;
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+    const abonos = (a.abonos || []).slice().sort((x, y) => (x.fecha || "").localeCompare(y.fecha || ""));
+    const obj = num(a.objetivo);
+
+    // 1) Ahorro acumulado en el tiempo (línea) + línea de objetivo como referencia.
+    if (abonos.length) {
+      let acc = 0;
+      const labels = [], data = [];
+      abonos.forEach((x) => {
+        acc += (x.tipo === "Retiro" ? -1 : 1) * num(x.monto);
+        labels.push(fmtDate(x.fecha));
+        data.push(acc);
+      });
+      const datasets = [{ label: "Ahorrado", data, borderColor: col.primary, backgroundColor: "transparent", tension: 0.25, pointRadius: 3, fill: false }];
+      if (obj > 0) datasets.push({ label: "Objetivo", data: labels.map(() => obj), borderColor: col.success, borderDash: [6, 6], pointRadius: 0, fill: false });
+      mkChart("chAhorroAcum", { type: "line", data: { labels, datasets }, options: baseOpts(col, true) });
+    } else emptyCanvas("chAhorroAcum");
+
+    // 2) Abonos netos por mes (barras).
+    const porMes = {};
+    abonos.forEach((x) => { const k = (x.fecha || "").slice(0, 7); if (k) porMes[k] = (porMes[k] || 0) + (x.tipo === "Retiro" ? -1 : 1) * num(x.monto); });
+    const meses = Object.keys(porMes).sort();
+    if (meses.length) {
+      mkChart("chAhorroMes", {
+        type: "bar",
+        data: {
+          labels: meses.map((m) => monthLabel(m).replace(" de ", " ")),
+          datasets: [{ label: "Abonado", data: meses.map((m) => porMes[m]), backgroundColor: meses.map((m) => porMes[m] >= 0 ? col.success : col.danger), borderRadius: 6 }],
+        },
+        options: baseOpts(col, true),
+      });
+    } else emptyCanvas("chAhorroMes");
   }
 
   // ---------- Vista: Viajes ----------
@@ -1828,13 +2104,16 @@
 
     const idx = list.findIndex((r) => r.id === id);
     if (idx >= 0) {
-      // Al editar proyecto/cotización, conserva sus sub-colecciones (no están en el formulario).
-      list[idx] = (mod === "proyectos" || mod === "cotizaciones") ? { ...list[idx], ...rec } : rec;
+      // Al editar proyecto/cotización/meta, conserva sus sub-colecciones (no están en el formulario).
+      list[idx] = (mod === "proyectos" || mod === "cotizaciones" || mod === "ahorros") ? { ...list[idx], ...rec } : rec;
     } else {
       if (mod === "proyectos") { rec.movimientos = []; rec.etapas = []; rec.proveedores = []; rec.fondos = []; rec.presupuestoCat = {}; }
       if (mod === "cotizaciones") { rec.opciones = []; rec.elegidaId = ""; rec.movimientoId = ""; rec.fecha = isoToday(); }
+      if (mod === "ahorros") { rec.abonos = []; rec.ahorrado = 0; }
       list.push(rec);
     }
+    // El total ahorrado de una meta se deriva de sus abonos.
+    if (mod === "abono") recalcAhorrado(meta.parent());
     scheduleSave();
     closeModal();
     render();
@@ -1852,6 +2131,7 @@
       VIEW = b.dataset.view;
       CURRENT_PROYECTO = null;     // siempre entra a la lista de proyectos
       CURRENT_COTIZACION = null;   // …y a la lista de cotizaciones
+      OPEN_AHORRO = null;          // …y a la lista de ahorros
       closeNav();
       render();
     });
@@ -1919,6 +2199,15 @@
     // Registrar la opción elegida como gasto en el proyecto vinculado.
     if (e.target.closest(".js-cotiz-registrar")) { const c = cotizacionActual(); if (c) registrarGastoCotizacion(c); return; }
 
+    // Abrir / cerrar el detalle de una meta de ahorro.
+    const openA = e.target.closest(".js-open-ahorro");
+    if (openA) { OPEN_AHORRO = openA.dataset.id; render(); return; }
+    if (e.target.closest(".js-back-ahorro")) { OPEN_AHORRO = null; render(); return; }
+
+    // Agregar un abono a una meta de ahorro (fija la meta destino y abre el modal).
+    const addAbono = e.target.closest(".js-add-abono");
+    if (addAbono) { CURRENT_AHORRO = addAbono.dataset.id; openModal("abono"); return; }
+
     const addBtn = e.target.closest(".js-add");
     if (addBtn) { openModal(addBtn.dataset.mod); return; }
 
@@ -1926,6 +2215,9 @@
     if (!row) return;
     const id = row.dataset.id;
     const mod = row.dataset.mod || currentMod();
+
+    // Para editar/borrar un abono, fija primero su meta padre (viene en data-parent).
+    if (mod === "abono" && row.dataset.parent) CURRENT_AHORRO = row.dataset.parent;
 
     // La colección puede ser global (DATA[mod]) o anidada dentro de su registro padre.
     const meta = NESTED_COLL[mod];
@@ -1941,10 +2233,12 @@
         if (meta) {
           const parent = meta.parent();
           if (parent) parent[meta.coll] = parent[meta.coll].filter((r) => r.id !== id);
+          if (mod === "abono") recalcAhorrado(parent); // el total ahorrado depende de los abonos
         } else {
           DATA[mod] = DATA[mod].filter((r) => r.id !== id);
           if (mod === "proyectos" && CURRENT_PROYECTO === id) CURRENT_PROYECTO = null;
           if (mod === "cotizaciones" && CURRENT_COTIZACION === id) CURRENT_COTIZACION = null;
+          if (mod === "ahorros" && OPEN_AHORRO === id) OPEN_AHORRO = null;
         }
         scheduleSave(); render(); toast("Registro eliminado");
       }
