@@ -4,7 +4,8 @@ import { useFinanzas } from "../store/finanzas.js";
 import { useCrud } from "../composables/useCrud.js";
 import EmptyState from "../components/EmptyState.vue";
 import RecordActions from "../components/RecordActions.vue";
-import { fmtMoney, fmtDate, monthLabel, isoToday, sum } from "../utils/format.js";
+import { fmtMoney, fmtDate, monthLabel, isoToday, shiftMonth, sum } from "../utils/format.js";
+import { toast } from "../composables/useToast.js";
 
 const store = useFinanzas();
 const { add, edit, remove } = useCrud();
@@ -16,6 +17,19 @@ const ps = computed(() =>
 
 const total = computed(() => sum(ps.value, "monto"));
 const pagado = computed(() => sum(ps.value.filter((p) => p.pagado), "monto"));
+
+// Feature extra: ¿hay pagos en el mes anterior para copiar?
+const prevCount = computed(() =>
+  store.pagosDelMes(shiftMonth(store.currentMonth, -1)).length);
+
+function copiarMesAnterior() {
+  const r = store.copiarPagosMesAnterior();
+  if (r.copiados === 0) {
+    toast(r.disponibles ? "Esos pagos ya están en el mes actual" : "No hay pagos en el mes anterior");
+  } else {
+    toast(`📋 ${r.copiados} pago(s) copiados del mes anterior`);
+  }
+}
 
 // Estado del pago: pagado / vencido / pendiente.
 function estado(p) {
@@ -31,7 +45,10 @@ function estado(p) {
       <div class="view-title">Pagos del mes</div>
       <div class="view-sub">{{ monthLabel(store.currentMonth) }} · {{ ps.length }} pago(s) · Pagado {{ fmtMoney(pagado) }} de {{ fmtMoney(total) }}</div>
     </div>
-    <button class="btn btn-primary" @click="add('pagos')">＋ Agregar pago</button>
+    <div style="display:flex;gap:8px">
+      <button v-if="prevCount" class="btn btn-ghost" title="Clona los pagos del mes anterior a este mes (sin duplicar)" @click="copiarMesAnterior">📋 Copiar del mes anterior</button>
+      <button class="btn btn-primary" @click="add('pagos')">＋ Agregar pago</button>
+    </div>
   </div>
 
   <div v-if="ps.length" class="table-wrap">
