@@ -32,7 +32,7 @@ src/
 ## Estado por etapas
 
 - [x] **Etapa 1** — Scaffold Vite+Vue, store con persistencia/import/export/demo/tema, layout (sidebar/topbar/modal/toast), Dashboard completo (KPIs + 4 gráficas + próximos viajes). **Verificada en navegador** (Chrome headless): KPIs, las 4 gráficas, Demo, cambio de mes/tema, navegación y persistencia tras recarga, sin errores de consola. Bug corregido: `ChartCanvas` reconstruía la gráfica con flush `pre` (antes de montar el `<canvas>`); las gráficas que arrancan en estado vacío (`null`) no se dibujaban al llegar datos → se cambió a `flush:"post"`.
-- [ ] **Etapa 2** — Vistas: pagos, recurrentes, ingresos, sueldo.
+- [x] **Etapa 2** — Vistas: pagos (toggle pagado + estados), recurrentes, ingresos (banner de sueldo automático) y sueldo (KPIs + doughnut de composición anual + bonos). Piezas reutilizables: `useCrud` (alta/edición/borrado con confirm+toast), `EmptyState` y `RecordActions`. **Verificada en navegador**: CRUD completo (alta/edición/borrado), toggle de pagado reactivo, modal de sueldo y bonos, banner y gráfica condicionales con sueldo configurado, y persistencia tras recarga; sin errores de consola.
 - [ ] **Etapa 3** — Vistas: ahorros (+detalle), proyectos (+detalle), cotizaciones (+detalle), viajes.
 - [ ] **Etapa 4** — PWA (vite-plugin-pwa) + ajuste final de build para despliegue. Eliminar `js/app.js`, `css/`, `sw.js` legados.
 
