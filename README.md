@@ -1,8 +1,8 @@
 # 💰 Mis Finanzas
 
-Sistema personal de finanzas, **100% estático** (HTML + CSS + JavaScript puro, sin frameworks ni build).
-Listo para publicar en **GitHub Pages**. Los datos se guardan en tu navegador y los puedes
-**exportar / importar como JSON** para llevártelos a donde quieras.
+Sistema personal de finanzas hecho con **Vue 3 + Vite** (Pinia + Vue Router). **100% local**: los datos
+se guardan en tu navegador (`localStorage`) y los puedes **exportar / importar como JSON** para
+llevártelos a donde quieras. El build genera un sitio estático (`dist/`) que sirves en cualquier servidor.
 
 ## ✨ Características
 
@@ -35,9 +35,9 @@ Servida por **HTTPS** (GitHub Pages ya lo es), el navegador ofrece instalarla:
 - **iPhone / Safari:** botón *Compartir* → *Agregar a pantalla de inicio*.
 - **Desktop / Chrome–Edge:** ícono de instalar ⊕ en la barra de direcciones.
 
-Una vez instalada abre offline (tus datos ya viven en `localStorage`). El service worker (`sw.js`)
-**solo funciona sobre HTTP(S)**, no abriendo el archivo con `file://`. Si cambias archivos del shell,
-sube `CACHE_VERSION` en `sw.js` para forzar la actualización.
+Una vez instalada abre offline (tus datos ya viven en `localStorage`). El service worker lo genera
+**`vite-plugin-pwa`** en cada `npm run build` (estrategia `autoUpdate`: al publicar una versión nueva,
+se actualiza solo). Solo funciona sobre **HTTP(S)** o `localhost`, no abriendo el archivo con `file://`.
 
 ## 💾 Cómo funciona la persistencia
 
@@ -50,24 +50,40 @@ sube `CACHE_VERSION` en `sw.js` para forzar la actualización.
 > Flujo recomendado: trabajas, al terminar **Exportas** el JSON como respaldo. La próxima vez,
 > si cambias de equipo o navegador, **Importas** ese JSON y sigues donde quedaste.
 
-## 🚀 Publicar en GitHub Pages
+## 🛠️ Desarrollo
 
-1. Crea un repositorio y sube estos archivos (`index.html`, `css/`, `js/`, etc.).
-2. En GitHub: **Settings → Pages → Source: `main` / root**.
-3. Tu sitio queda en `https://TU-USUARIO.github.io/TU-REPO/`.
+```bash
+npm install      # instala dependencias
+npm run dev      # servidor de desarrollo (Vite) en http://localhost:5173
+npm run build    # genera el sitio estático en dist/
+npm run preview  # sirve el dist/ ya construido para probarlo
+```
 
-No requiere servidor ni compilación. La única dependencia (Chart.js) se carga por CDN.
+## 🚀 Desplegar en un servidor
+
+1. `npm run build` → genera la carpeta **`dist/`** (HTML, JS, CSS, service worker, manifest).
+2. Sube el contenido de `dist/` a tu servidor estático (Nginx, Apache, Node, GitHub Pages…).
+3. Como usa `base: "./"` y el router en **modo hash**, funciona desde la raíz **o desde cualquier
+   subcarpeta** sin reglas de rewrite.
 
 ## 📁 Estructura
 
 ```
-index.html            Estructura y layout
-css/styles.css        Estilos + temas claro/oscuro + responsive
-js/app.js             Toda la lógica (estado, render, charts, import/export)
-data.ejemplo.json     JSON de ejemplo para importar
-manifest.webmanifest  Metadatos de la PWA (nombre, iconos, colores)
-sw.js                 Service worker (cache del shell para uso offline)
-icons/                Iconos de la app (192, 512, maskable, apple-touch)
+index.html              Punto de entrada de Vite (monta la app en #app)
+vite.config.js          Config de Vite + PWA (vite-plugin-pwa)
+public/icons/           Iconos de la app (192, 512, maskable, apple-touch)
+public/data.ejemplo.json JSON de ejemplo para importar
+src/
+  main.js               Bootstrap (Pinia + Router + estilos)
+  App.vue               Layout: sidebar + topbar + router-view + modal + toast
+  router/index.js       Rutas (una por vista; detalles en /x/:id)
+  store/finanzas.js     Pinia: estado + autosave localStorage + agregaciones + CRUD
+  schemas.js            Esquemas de los formularios del modal
+  data/                 constants, model (emptyData/migrate), sample
+  utils/                format, charts, ahorro, proyecto, cotiz
+  composables/          useToast, useModal, useCrud
+  components/           Sidebar, Topbar, Modal, Toast, KpiCard, ChartCanvas, EmptyState…
+  views/                Una vista .vue por sección (+ las de detalle)
 ```
 
 ## 🧩 Formato del JSON

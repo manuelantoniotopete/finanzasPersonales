@@ -34,7 +34,11 @@ src/
 - [x] **Etapa 1** — Scaffold Vite+Vue, store con persistencia/import/export/demo/tema, layout (sidebar/topbar/modal/toast), Dashboard completo (KPIs + 4 gráficas + próximos viajes). **Verificada en navegador** (Chrome headless): KPIs, las 4 gráficas, Demo, cambio de mes/tema, navegación y persistencia tras recarga, sin errores de consola. Bug corregido: `ChartCanvas` reconstruía la gráfica con flush `pre` (antes de montar el `<canvas>`); las gráficas que arrancan en estado vacío (`null`) no se dibujaban al llegar datos → se cambió a `flush:"post"`.
 - [x] **Etapa 2** — Vistas: pagos (toggle pagado + estados), recurrentes, ingresos (banner de sueldo automático) y sueldo (KPIs + doughnut de composición anual + bonos). Piezas reutilizables: `useCrud` (alta/edición/borrado con confirm+toast), `EmptyState` y `RecordActions`. **Verificada en navegador**: CRUD completo (alta/edición/borrado), toggle de pagado reactivo, modal de sueldo y bonos, banner y gráfica condicionales con sueldo configurado, y persistencia tras recarga; sin errores de consola.
 - [x] **Etapa 3** — Vistas con detalle: ahorros (+detalle con insights/tips/gráficas), viajes, proyectos (+detalle con fondos, etapas con slider, presupuesto por categoría, proveedores y movimientos con filtros), cotizaciones (+detalle comparador con elegir/registrar gasto). Lógica pura en `utils/ahorro.js`, `utils/proyecto.js`, `utils/cotiz.js`. Detalles vía router (`/x/:id`) sincronizando los `current*` del store. **Feature extra:** botón "Copiar del mes anterior" en Pagos (clona los pagos del mes previo sin duplicar). **Verificado en navegador**: CRUD de sub-colecciones, filtros/búsqueda de movimientos, slider de avance, comparador (elegir + registrar gasto en proyecto), copiar pagos y persistencia; sin errores de consola.
-- [ ] **Etapa 4** — PWA (vite-plugin-pwa) + ajuste final de build para despliegue. Eliminar `js/app.js`, `css/`, `sw.js` legados.
+- [x] **Etapa 4** — PWA con `vite-plugin-pwa` (`registerType: autoUpdate`): genera service worker + manifest, app **instalable y offline**. Eliminados los archivos legados del vanilla (`js/app.js`, `css/`, `sw.js`, `manifest.webmanifest`, `icons/`, `data.ejemplo.json` de la raíz). README actualizado al nuevo stack. **Verificado en navegador** sobre el build: manifest válido, service worker activo y carga offline desde caché; sin errores de consola.
+
+---
+
+✅ **Migración completa.** La app corre 100% en Vue 3 + Vite. El `js/app.js` original quedó como referencia en el historial de git (commits previos a la rama).
 
 ## Notas
 
