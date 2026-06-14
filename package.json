@@ -1,0 +1,22 @@
+{
+  "name": "mis-finanzas",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sistema personal de finanzas (Vue 3 + Vite). 100% local.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.1",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite": "^5.2.0"
+  }
+}

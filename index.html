@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Mis Finanzas</title>
   <meta name="description" content="Sistema personal de finanzas, 100% local: pagos, sueldo, ahorros, proyectos y viajes." />
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="css/styles.css?v=6" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
 
-  <!-- PWA -->
+  <!-- PWA (se completa en la Etapa 4 con vite-plugin-pwa) -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#4f6ef7" id="metaTheme" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
@@ -19,104 +17,7 @@
   <meta name="apple-mobile-web-app-title" content="Finanzas" />
 </head>
 <body>
-  <!-- ===== Sidebar ===== -->
-  <aside class="sidebar">
-    <div class="brand">
-      <span class="brand-logo">💰</span>
-      <span class="brand-name">Mis Finanzas</span>
-    </div>
-
-    <nav class="nav" id="nav">
-      <button class="nav-item is-active" data-view="dashboard">
-        <span class="nav-ico">📊</span> Dashboard
-      </button>
-      <button class="nav-item" data-view="pagos">
-        <span class="nav-ico">🧾</span> Pagos del mes
-      </button>
-      <button class="nav-item" data-view="recurrentes">
-        <span class="nav-ico">🔁</span> Gastos recurrentes
-      </button>
-      <button class="nav-item" data-view="ingresos">
-        <span class="nav-ico">💵</span> Ingresos
-      </button>
-      <button class="nav-item" data-view="sueldo">
-        <span class="nav-ico">💼</span> Sueldo
-      </button>
-      <button class="nav-item" data-view="ahorros">
-        <span class="nav-ico">🎯</span> Ahorros y metas
-      </button>
-      <button class="nav-item" data-view="proyectos">
-        <span class="nav-ico">🏗️</span> Proyectos
-      </button>
-      <button class="nav-item" data-view="cotizaciones">
-        <span class="nav-ico">🛒</span> Cotizaciones
-      </button>
-      <button class="nav-item" data-view="viajes">
-        <span class="nav-ico">🧳</span> Viajes
-      </button>
-    </nav>
-
-    <div class="sidebar-foot">
-      <div class="save-state" id="saveState" title="Estado de guardado local">
-        <span class="dot"></span><span id="saveStateText">Sin cambios</span>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ===== Main ===== -->
-  <div class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <button class="icon-btn only-mobile" id="menuBtn" title="Menú">☰</button>
-        <div class="month-picker">
-          <button class="icon-btn" id="prevMonth" title="Mes anterior">‹</button>
-          <input type="month" id="monthInput" class="month-input" />
-          <button class="icon-btn" id="nextMonth" title="Mes siguiente">›</button>
-        </div>
-      </div>
-
-      <div class="topbar-right">
-        <button class="btn btn-ghost" id="importBtn" title="Cargar un archivo JSON">⬆️ <span class="lbl">Importar</span></button>
-        <button class="btn btn-ghost" id="exportBtn" title="Descargar tus datos como JSON">⬇️ <span class="lbl">Exportar</span></button>
-        <button class="btn btn-ghost" id="sampleBtn" title="Cargar datos de ejemplo">✨ <span class="lbl">Demo</span></button>
-        <button class="icon-btn" id="themeBtn" title="Cambiar tema">🌙</button>
-        <input type="file" id="fileInput" accept="application/json,.json" hidden />
-      </div>
-    </header>
-
-    <main class="content" id="content"><!-- vistas inyectadas por JS --></main>
-  </div>
-
-  <!-- ===== Modal genérico ===== -->
-  <div class="modal-backdrop" id="modalBackdrop" hidden>
-    <div class="modal" role="dialog" aria-modal="true">
-      <div class="modal-head">
-        <h3 id="modalTitle">Registro</h3>
-        <button class="icon-btn" id="modalClose">✕</button>
-      </div>
-      <form id="modalForm" class="modal-form"><!-- campos inyectados --></form>
-      <div class="modal-foot">
-        <button class="btn btn-ghost" id="modalCancel" type="button">Cancelar</button>
-        <button class="btn btn-primary" id="modalSave" type="submit" form="modalForm">Guardar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Scrim del menú móvil ===== -->
-  <div class="nav-scrim" id="navScrim"></div>
-
-  <!-- ===== Toast ===== -->
-  <div class="toast" id="toast" hidden></div>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="js/app.js?v=7" defer></script>
-  <script>
-    // Registro del Service Worker (habilita instalación y uso offline).
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW no registrado:", e));
-      });
-    }
-  </script>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
